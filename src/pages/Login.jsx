@@ -30,10 +30,9 @@ export default function Login() {
             <div className="login-container">
                 <div className="login-header">
                     <div className="login-logo">
-                        <span className="logo-icon">P</span>
+                        <img src="https://i.ibb.co/PV2M5vG/Untitled-750-x-750-px.png" alt="Pioneers" className="login-logo-img" />
                     </div>
-                    <h1 className="login-title">Pioneers</h1>
-                    <p className="login-subtitle">Şirket Yönetim Paneli</p>
+                    {/* Titles removed as per request */}
                 </div>
 
                 <form className="login-form" onSubmit={handleSubmit}>
@@ -70,7 +69,7 @@ export default function Login() {
                 </form>
 
                 <div className="login-footer">
-                    <p>© 2026 Pioneers. Tüm hakları saklıdır.</p>
+                    <p>© 2026 Pioneers by Burakcan Aydın Tüm hakları saklıdır.</p>
                 </div>
             </div>
 

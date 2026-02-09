@@ -28,24 +28,11 @@
     gap: 12px;
 }
 
-.logo-icon {
-    width: 40px;
-    height: 40px;
-    background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 20px;
-}
-
-.logo-text {
-    font-size: 20px;
-    font-weight: 700;
-    background: linear-gradient(135deg, var(--primary-light) 0%, #c4b5fd 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+.logo-img {
+    height: 60px;
+    width: auto;
+    display: block;
+    margin: 0 auto;
 }
 
 .sidebar-nav {
@@ -100,6 +87,15 @@
 .sidebar-footer {
     padding: 16px;
     border-top: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-copyright {
+    margin-top: 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.4;
 }
 
 .user-info {

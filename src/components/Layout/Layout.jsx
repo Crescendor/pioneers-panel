@@ -24,8 +24,7 @@ export default function Layout() {
             <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
                 <div className="sidebar-header">
                     <div className="logo">
-                        <span className="logo-icon">P</span>
-                        <span className="logo-text">Pioneers</span>
+                        <img src="https://i.ibb.co/PV2M5vG/Untitled-750-x-750-px.png" alt="Pioneers" className="logo-img" />
                     </div>
                 </div>
 
@@ -107,6 +106,9 @@ export default function Layout() {
                         </div>
                     </div>
                     <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Çıkış</button>
+                    <div className="sidebar-copyright">
+                        © 2026 Pioneers by Burakcan Aydın Tüm hakları saklıdır.
+                    </div>
                 </div>
             </aside>
 
