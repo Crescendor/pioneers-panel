@@ -14,6 +14,8 @@ export default function Reports() {
     const [sort, setSort] = useState('newest');
     const [viewTeam, setViewTeam] = useState(false);
 
+    const [editingReport, setEditingReport] = useState(null);
+
     useEffect(() => { loadReports(); }, [period, sort, viewTeam]);
 
     const loadReports = async () => {
@@ -24,14 +26,43 @@ export default function Reports() {
         } catch (err) { console.error(err); }
     };
 
+    const handleOpenAdd = () => {
+        setEditingReport(null);
+        setForm({ case_id: '', category: 'General', impact: 'Medium', description: '', duration_minutes: '' });
+        setShowForm(true);
+    };
+
+    const handleOpenEdit = (report) => {
+        setEditingReport(report);
+        setForm({
+            case_id: report.case_id,
+            category: report.category,
+            impact: report.impact,
+            description: report.description,
+            duration_minutes: report.duration_minutes
+        });
+        setShowForm(true);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await api.post('/reports', { ...form, report_date: new Date().toISOString() });
+            if (editingReport) {
+                await api.put(`/reports/${editingReport.id}`, { ...form, report_date: editingReport.report_date });
+            } else {
+                await api.post('/reports', { ...form, report_date: new Date().toISOString() });
+            }
             setShowForm(false);
-            setForm({ case_id: '', category: 'General', impact: 'Medium', description: '', duration_minutes: '' });
             loadReports();
         } catch (err) { alert(err.response?.data?.error || 'Hata'); }
+    };
+
+    const handleDelete = async (id) => {
+        if (!confirm('Bu raporu silmek istediğinize emin misiniz?')) return;
+        try {
+            await api.delete(`/reports/${id}`);
+            loadReports();
+        } catch (err) { alert('Hata oluştu'); }
     };
 
     const toggleUpvote = async (id) => {
@@ -46,7 +77,7 @@ export default function Reports() {
                     <h1 className="page-title">📊 Raporlarım</h1>
                     <p className="page-subtitle">Sistem raporlamalarınızı yönetin</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Yeni Rapor</button>
+                <button className="btn btn-primary" onClick={handleOpenAdd}>+ Yeni Rapor</button>
             </div>
 
             <div className="card" style={{ marginBottom: 20 }}>
@@ -63,10 +94,12 @@ export default function Reports() {
                         <option value="oldest">Eskiden Yeniye</option>
                         <option value="upvotes">En Fazla Artılanan</option>
                     </select>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={viewTeam} onChange={e => setViewTeam(e.target.checked)} />
-                        Takım raporları
-                    </label>
+                    {user?.team_id && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input type="checkbox" checked={viewTeam} onChange={e => setViewTeam(e.target.checked)} />
+                            Takım raporları
+                        </label>
+                    )}
                 </div>
             </div>
 
@@ -81,6 +114,7 @@ export default function Reports() {
                             <th>Impact</th>
                             <th>Süre</th>
                             <th>+</th>
+                            {!viewTeam && <th>İşlem</th>}
                         </tr>
                     </thead>
                     <tbody>
@@ -97,6 +131,14 @@ export default function Reports() {
                                         +{r.upvote_count || r.upvotes || 0}
                                     </button>
                                 </td>
+                                {!viewTeam && (
+                                    <td>
+                                        <div style={{ display: 'flex', gap: 4 }}>
+                                            <button className="btn btn-sm btn-ghost" onClick={() => handleOpenEdit(r)}>Düzenle</button>
+                                            <button className="btn btn-sm btn-ghost text-danger" onClick={() => handleDelete(r.id)}>Sil</button>
+                                        </div>
+                                    </td>
+                                )}
                             </tr>
                         ))}
                     </tbody>
@@ -108,7 +150,7 @@ export default function Reports() {
                 <div className="modal-overlay" onClick={() => setShowForm(false)}>
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3 className="modal-title">Yeni Rapor</h3>
+                            <h3 className="modal-title">{editingReport ? 'Raporu Düzenle' : 'Yeni Rapor'}</h3>
                             <button className="modal-close" onClick={() => setShowForm(false)}>×</button>
                         </div>
                         <form onSubmit={handleSubmit}>
@@ -140,7 +182,7 @@ export default function Reports() {
                             </div>
                             <div className="modal-footer">
                                 <button type="button" className="btn btn-secondary" onClick={() => setShowForm(false)}>İptal</button>
-                                <button type="submit" className="btn btn-primary">Kaydet</button>
+                                <button type="submit" className="btn btn-primary">{editingReport ? 'Güncelle' : 'Kaydet'}</button>
                             </div>
                         </form>
                     </div>

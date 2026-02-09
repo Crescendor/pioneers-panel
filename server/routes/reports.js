@@ -120,10 +120,43 @@ router.get('/export/:teamId', authenticateToken, requireRole('SuperAdmin', 'Team
     }
 });
 
+// Update report
+router.put('/:id', authenticateToken, (req, res) => {
+    try {
+        const { case_id, category, impact, description, duration_minutes, report_date } = req.body;
+
+        const report = db.prepare('SELECT user_id FROM reports WHERE id = ?').get(req.params.id);
+        if (!report) return res.status(404).json({ error: 'Rapor bulunamadı' });
+
+        // Only owner or Admin/TeamLead can edit
+        if (report.user_id !== req.user.id && req.user.role === 'Agent') {
+            return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+        }
+
+        db.prepare(`
+            UPDATE reports SET case_id = ?, category = ?, impact = ?, description = ?, duration_minutes = ?, report_date = ?
+            WHERE id = ?
+        `).run(case_id, category, impact, description, duration_minutes, report_date, req.params.id);
+
+        res.json({ message: 'Rapor güncellendi' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Sunucu hatası' });
+    }
+});
+
 // Delete report
 router.delete('/:id', authenticateToken, (req, res) => {
     try {
-        db.prepare('DELETE FROM reports WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+        const report = db.prepare('SELECT user_id FROM reports WHERE id = ?').get(req.params.id);
+        if (!report) return res.status(404).json({ error: 'Rapor bulunamadı' });
+
+        // Only owner or Admin/TeamLead can delete
+        if (report.user_id !== req.user.id && req.user.role === 'Agent') {
+            return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+        }
+
+        db.prepare('DELETE FROM reports WHERE id = ?').run(req.params.id);
         res.json({ message: 'Rapor silindi' });
     } catch (err) {
         console.error(err);
