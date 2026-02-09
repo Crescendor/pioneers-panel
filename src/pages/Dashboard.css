@@ -1,0 +1,88 @@
+.dashboard .shift-card .timer-display {
+    text-align: center;
+    padding: 24px 0;
+}
+
+.dashboard .shift-controls {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
+
+.dashboard .break-indicator {
+    text-align: center;
+    padding: 12px;
+    background: rgba(245, 158, 11, 0.1);
+    border-radius: var(--radius-sm);
+    margin: 16px 0;
+    color: var(--warning);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.dashboard .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.dashboard .stat-item {
+    text-align: center;
+    padding: 16px;
+    background: var(--bg-dark);
+    border-radius: var(--radius-sm);
+}
+
+.dashboard .stat-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--primary-light);
+}
+
+.dashboard .stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.dashboard .suggestion-form {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.dashboard .suggestion-form .form-input {
+    flex: 1;
+}
+
+.dashboard .suggestions-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.dashboard .suggestion-item {
+    padding: 12px;
+    background: var(--bg-dark);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+}
+
+.dashboard .suggestion-author {
+    font-size: 12px;
+    color: var(--primary-light);
+    font-weight: 500;
+}
+
+.dashboard .suggestion-content {
+    margin-top: 4px;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.text-muted {
+    color: var(--text-muted);
+}
