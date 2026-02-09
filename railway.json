@@ -7,7 +7,7 @@
     "deploy": {
         "numReplicas": 1,
         "startCommand": "npm start",
-        "healthcheckPath": "/api/auth/verify",
+        "healthcheckPath": "/api/health",
         "restartPolicyType": "ON_FAILURE"
     }
 }

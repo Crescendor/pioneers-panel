@@ -40,6 +40,11 @@ app.use('/api/requests', requestsRoutes);
 app.use('/api/suggestions', suggestionsRoutes);
 app.use('/api/sessions', sessionsRoutes);
 
+// Health Check
+app.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.join(__dirname, '../dist')));
