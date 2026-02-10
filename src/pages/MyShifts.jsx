@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../../context/AuthContext';
-import api from '../../utils/api';
+import { useAuth } from '../context/AuthContext';
+import api from '../utils/api';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
