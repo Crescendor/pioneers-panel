@@ -18,8 +18,15 @@ export default function AdminShifts() {
     const [draggedTemplate, setDraggedTemplate] = useState(null);
 
     // User Schedule Modal
-    const [selectedAgent, setSelectedAgent] = useState(null);
-    const [agentDateRange, setAgentDateRange] = useState({ start: '', end: '', status: 'Raporlu' });
+    const [selectedAgents, setSelectedAgents] = useState([]); // Array of user IDs
+    const [showFlexibleModal, setShowFlexibleModal] = useState(false);
+    const [flexibleShift, setFlexibleShift] = useState({
+        start: '12:00',
+        end: '13:00',
+        label: '',
+        color: '#22c55e',
+        status: ''
+    });
 
     // Report Modal
     const [showReportModal, setShowReportModal] = useState(false);
@@ -27,9 +34,7 @@ export default function AdminShifts() {
 
     const shiftTemplates = [
         { label: 'Sabah', start: '11:00', end: '20:00', color: '#6366f1' },
-        { label: 'Akşam', start: '13:00', end: '22:00', color: '#8b5cf6' },
-        { label: 'Eğitim', start: '13:00', end: '15:00', color: '#f59e0b', status: 'Eğitim' },
-        { label: 'İzin', start: '00:00', end: '00:00', color: '#ef4444', isOff: true }
+        { label: 'Akşam', start: '13:00', end: '22:00', color: '#8b5cf6' }
     ];
 
     useEffect(() => { loadTeams(); }, []);
@@ -71,7 +76,7 @@ export default function AdminShifts() {
                 shift_date: selectedDate,
                 start_time: draggedTemplate.start,
                 end_time: draggedTemplate.end,
-                special_status: draggedTemplate.isOff ? 'İzin' : draggedTemplate.status || null
+                special_status: draggedTemplate.label // Use label as status/title
             };
             await api.post('/shifts', shiftData);
             loadData();
@@ -82,23 +87,37 @@ export default function AdminShifts() {
         }
     };
 
-    const handleBulkAssign = async () => {
-        const password = prompt('Seçili tüm agentlara bu vardiyayı atamak istiyor musunuz? (Onay için "pioneers" yazın)');
-        if (password !== 'pioneers') return;
+    const handleFlexibleCreate = async () => {
+        if (selectedAgents.length === 0) return alert('Lütfen en az bir agent seçin.');
+        if (!flexibleShift.start || !flexibleShift.end) return alert('Saat aralığı girin.');
 
-        const start = prompt('Başlangıç saati (HH:mm)', '11:00');
-        const end = prompt('Bitiş saati (HH:mm)', '20:00');
-        if (!start || !end) return;
-
-        const shiftsToCreate = users.map(u => ({
-            user_id: u.id,
+        const shiftsToCreate = selectedAgents.map(userId => ({
+            user_id: userId,
             shift_date: selectedDate,
-            start_time: start,
-            end_time: end
+            start_time: flexibleShift.start,
+            end_time: flexibleShift.end,
+            special_status: flexibleShift.label || 'Mesai' // Store label in special_status
         }));
 
-        await api.post('/shifts/bulk', { shifts: shiftsToCreate });
-        loadData();
+        try {
+            await api.post('/shifts/bulk', { shifts: shiftsToCreate });
+            setShowFlexibleModal(false);
+            setSelectedAgents([]); // Clear selection
+            loadData();
+        } catch (err) {
+            alert('Atama başarısız oldu.');
+        }
+    };
+
+    const toggleAgentSelection = (userId) => {
+        setSelectedAgents(prev =>
+            prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+        );
+    };
+
+    const selectAll = () => {
+        if (selectedAgents.length === users.length) setSelectedAgents([]);
+        else setSelectedAgents(users.map(u => u.id));
     };
 
     const handleGenerateReport = () => {
@@ -190,11 +209,15 @@ export default function AdminShifts() {
             <div className="page-header">
                 <div>
                     <h1 className="page-title">📅 Vardiya Yönetimi</h1>
-                    <p className="page-subtitle">Sürükle bırak ile kolayca planlama yapın</p>
+                    <p className="page-subtitle">Timeline üzerinde esnek planlama</p>
                 </div>
                 <div className="header-actions">
                     <button className="btn btn-secondary" onClick={() => setShowReportModal(true)}>📄 PDF İndir</button>
-                    <button className="btn btn-primary" onClick={handleBulkAssign}>🚀 Toplu Atama</button>
+                    {selectedAgents.length > 0 && (
+                        <button className="btn btn-success" onClick={() => setShowFlexibleModal(true)}>
+                            ✨ Seçilenlere Ekle ({selectedAgents.length})
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -227,7 +250,15 @@ export default function AdminShifts() {
 
             <div className="shifts-grid card">
                 <div className="grid-header">
-                    <div className="agent-col">Agent</div>
+                    <div className="agent-col" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <input
+                            type="checkbox"
+                            checked={users.length > 0 && selectedAgents.length === users.length}
+                            onChange={selectAll}
+                            style={{ width: 16, height: 16 }}
+                        />
+                        Agent
+                    </div>
                     <div className="timeline-axis">
                         {Array.from({ length: 12 }, (_, i) => 11 + i).map(h => (
                             <div key={h} className="hour-mark">{h}:00</div>
@@ -246,48 +277,60 @@ export default function AdminShifts() {
                                 onDrop={() => handleDrop(u.id)}
                             >
                                 <div className="agent-cell">
-                                    <div className="agent-mini-info">
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <div>
-                                                <div
-                                                    className="name"
-                                                    style={{ cursor: 'pointer', textDecoration: 'underline' }}
-                                                    onClick={() => setSelectedAgent(u)}
-                                                >
-                                                    {u.full_name}
+                                    <div className="agent-mini-info" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedAgents.includes(u.id)}
+                                            onChange={() => toggleAgentSelection(u.id)}
+                                            style={{ width: 16, height: 16 }}
+                                        />
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div>
+                                                    <div
+                                                        className="name"
+                                                        style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                                        onClick={() => setSelectedAgent(u)}
+                                                    >
+                                                        {u.full_name}
+                                                    </div>
+                                                    <div className="id">NOT_IZM_{u.agent_number}</div>
                                                 </div>
-                                                <div className="id">NOT_IZM_{u.agent_number}</div>
+                                                <button
+                                                    className="btn btn-sm btn-secondary"
+                                                    style={{ padding: '4px 8px', fontSize: '12px' }}
+                                                    onClick={() => {
+                                                        const doc = new jsPDF();
+                                                        doc.text(`Vardiya Belgesi - ${u.full_name}`, 14, 15);
+                                                        doc.text(`Tarih: ${selectedDate}`, 14, 25);
+
+                                                        const userShifts = shifts.filter(s => s.user_id === u.id).sort((a, b) => a.start_time.localeCompare(b.start_time));
+                                                        const bodyData = userShifts.map(s => [
+                                                            `NOT_IZM_${u.agent_number}`,
+                                                            u.full_name,
+                                                            `${s.start_time} - ${s.end_time}`,
+                                                            s.special_status || 'Mesai'
+                                                        ]);
+
+                                                        if (bodyData.length === 0) bodyData.push(['-', '-', 'Atanmadı', '-']);
+
+                                                        doc.autoTable({
+                                                            startY: 35,
+                                                            head: [['Agent No', 'İsim Soyisim', 'Vardiya', 'Durum']],
+                                                            body: bodyData
+                                                        });
+                                                        doc.save(`vardiya_${u.agent_number}_${selectedDate}.pdf`);
+                                                    }}
+                                                >📄</button>
                                             </div>
-                                            <button
-                                                className="btn btn-sm btn-secondary"
-                                                style={{ padding: '4px 8px', fontSize: '12px' }}
-                                                onClick={() => {
-                                                    const doc = new jsPDF();
-                                                    doc.text(`Vardiya Belgesi - ${u.full_name}`, 14, 15);
-                                                    doc.text(`Tarih: ${selectedDate}`, 14, 25);
-
-                                                    const userShifts = shifts.filter(s => s.user_id === u.id).sort((a, b) => a.start_time.localeCompare(b.start_time));
-                                                    const bodyData = userShifts.map(s => [
-                                                        `NOT_IZM_${u.agent_number}`,
-                                                        u.full_name,
-                                                        `${s.start_time} - ${s.end_time}`,
-                                                        s.special_status || 'Mesai'
-                                                    ]);
-
-                                                    if (bodyData.length === 0) bodyData.push(['-', '-', 'Atanmadı', '-']);
-
-                                                    doc.autoTable({
-                                                        startY: 35,
-                                                        head: [['Agent No', 'İsim Soyisim', 'Vardiya', 'Durum']],
-                                                        body: bodyData
-                                                    });
-                                                    doc.save(`vardiya_${u.agent_number}_${selectedDate}.pdf`);
-                                                }}
-                                            >📄</button>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="timeline-cell">
+                                <div className="timeline-cell" onClick={() => {
+                                    // Clicking empty space -> Select just this agent and open modal
+                                    setSelectedAgents([u.id]);
+                                    setShowFlexibleModal(true);
+                                }}>
                                     {shifts.filter(s => s.user_id === u.id).map(shift => (
                                         <div
                                             key={shift.id}
@@ -295,7 +338,7 @@ export default function AdminShifts() {
                                             style={{
                                                 left: `${getTimelinePos(shift.start_time)}%`,
                                                 width: `${getTimelinePos(shift.end_time) - getTimelinePos(shift.start_time)}%`,
-                                                backgroundColor: shift.special_status === 'İzin' ? '#ef4444' : shift.special_status === 'Eğitim' ? '#f59e0b' : shift.special_status === 'Raporlu' ? '#ef4444' : '#6366f1'
+                                                backgroundColor: shift.special_status === 'İzin' ? '#ef4444' : shift.special_status === 'Raporlu' ? '#ef4444' : '#6366f1' // Default blue
                                             }}
                                             onClick={(e) => { e.stopPropagation(); setEditingShift(shift); }}
                                             title={`${shift.start_time} - ${shift.end_time} (${shift.special_status || 'Mesai'})`}
@@ -342,34 +385,49 @@ export default function AdminShifts() {
                 </div>
             )}
 
-            {selectedAgent && (
-                <div className="modal-overlay" onClick={() => setSelectedAgent(null)}>
+            {showFlexibleModal && (
+                <div className="modal-overlay" onClick={() => setShowFlexibleModal(false)}>
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3 className="modal-title">{selectedAgent.full_name} - Toplu İşlem</h3>
-                            <button className="modal-close" onClick={() => setSelectedAgent(null)}>×</button>
+                            <h3 className="modal-title">Esnek Vardiya Ekle</h3>
+                            <div className="text-muted small">{selectedAgents.length} kişi seçili</div>
+                            <button className="modal-close" onClick={() => setShowFlexibleModal(false)}>×</button>
                         </div>
                         <div className="modal-body">
                             <div className="form-group">
-                                <label className="form-label">Başlangıç Tarihi</label>
-                                <input type="date" className="form-input" value={agentDateRange.start} onChange={e => setAgentDateRange({ ...agentDateRange, start: e.target.value })} />
+                                <label className="form-label">Başlangıç</label>
+                                <input type="time" className="form-input" value={flexibleShift.start} onChange={e => setFlexibleShift({ ...flexibleShift, start: e.target.value })} />
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Bitiş Tarihi</label>
-                                <input type="date" className="form-input" value={agentDateRange.end} onChange={e => setAgentDateRange({ ...agentDateRange, end: e.target.value })} />
+                                <label className="form-label">Bitiş</label>
+                                <input type="time" className="form-input" value={flexibleShift.end} onChange={e => setFlexibleShift({ ...flexibleShift, end: e.target.value })} />
                             </div>
                             <div className="form-group">
-                                <label className="form-label">Durum</label>
-                                <select className="form-select" value={agentDateRange.status} onChange={e => setAgentDateRange({ ...agentDateRange, status: e.target.value })}>
-                                    <option value="Raporlu">Raporlu</option>
-                                    <option value="İzinli">İzinli</option>
-                                    <option value="Eğitim">Eğitim</option>
-                                </select>
+                                <label className="form-label">Etiket / Durum</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="Örn: Eğitim, Toplantı, Mesai..."
+                                    value={flexibleShift.label}
+                                    onChange={e => setFlexibleShift({ ...flexibleShift, label: e.target.value })}
+                                />
+                                <div className="quick-tags" style={{ marginTop: 8, display: 'flex', gap: 5 }}>
+                                    {['Eğitim', 'Toplantı', 'İzin', 'Raporlu'].map(tag => (
+                                        <span
+                                            key={tag}
+                                            className="badge badge-secondary"
+                                            style={{ cursor: 'pointer' }}
+                                            onClick={() => setFlexibleShift({ ...flexibleShift, label: tag })}
+                                        >
+                                            {tag}
+                                        </span>
+                                    ))}
+                                </div>
                             </div>
                         </div>
                         <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setSelectedAgent(null)}>İptal</button>
-                            <button className="btn btn-primary" onClick={handleAgentBulkAction}>Uygula</button>
+                            <button className="btn btn-secondary" onClick={() => setShowFlexibleModal(false)}>İptal</button>
+                            <button className="btn btn-success" onClick={handleFlexibleCreate}>Ekle</button>
                         </div>
                     </div>
                 </div>
