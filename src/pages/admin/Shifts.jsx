@@ -9,7 +9,8 @@ export default function AdminShifts() {
     const { user } = useAuth();
     const [teams, setTeams] = useState([]);
     const [users, setUsers] = useState([]);
-    const [shifts, setShifts] = useState([]);
+    const [shifts, setShifts] = useState([]); // Displayed shifts
+    const [allShifts, setAllShifts] = useState([]); // All fetched shifts
     const [selectedTeam, setSelectedTeam] = useState('');
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [editingShift, setEditingShift] = useState(null);
@@ -20,9 +21,14 @@ export default function AdminShifts() {
     const [selectedAgent, setSelectedAgent] = useState(null);
     const [agentDateRange, setAgentDateRange] = useState({ start: '', end: '', status: 'Raporlu' });
 
+    // Report Modal
+    const [showReportModal, setShowReportModal] = useState(false);
+    const [reportConfig, setReportConfig] = useState({ type: 'daily', start: '', end: '' });
+
     const shiftTemplates = [
         { label: 'Sabah', start: '11:00', end: '20:00', color: '#6366f1' },
         { label: 'Akşam', start: '13:00', end: '22:00', color: '#8b5cf6' },
+        { label: 'Eğitim', start: '13:00', end: '15:00', color: '#f59e0b', status: 'Eğitim' },
         { label: 'İzin', start: '00:00', end: '00:00', color: '#ef4444', isOff: true }
     ];
 
@@ -43,6 +49,7 @@ export default function AdminShifts() {
                 api.get(`/shifts/team/${selectedTeam}`)
             ]);
             setUsers(usersRes.data);
+            setAllShifts(shiftsRes.data);
             // Filter shifts for the selected date
             setShifts(shiftsRes.data.filter(s => s.shift_date === selectedDate));
         } catch (err) {
@@ -64,7 +71,7 @@ export default function AdminShifts() {
                 shift_date: selectedDate,
                 start_time: draggedTemplate.start,
                 end_time: draggedTemplate.end,
-                special_status: draggedTemplate.isOff ? 'İzin' : null
+                special_status: draggedTemplate.isOff ? 'İzin' : draggedTemplate.status || null
             };
             await api.post('/shifts', shiftData);
             loadData();
@@ -94,27 +101,53 @@ export default function AdminShifts() {
         loadData();
     };
 
-    const downloadPDF = () => {
+    const handleGenerateReport = () => {
         const doc = new jsPDF();
-        doc.text(`Vardiya Planı - ${selectedDate}`, 14, 15);
+        let title = 'Vardiya Raporu';
+        let filteredShifts = [...allShifts];
 
-        const tableBody = users.map(u => {
-            const shift = shifts.find(s => s.user_id === u.id);
-            return [
-                `NOT_IZM_${u.agent_number}`,
-                u.full_name,
-                shift ? `${shift.start_time} - ${shift.end_time}` : 'Atanmadı',
-                shift?.special_status || '-'
-            ];
+        if (reportConfig.type === 'daily') {
+            title += ` - ${selectedDate}`;
+            filteredShifts = filteredShifts.filter(s => s.shift_date === selectedDate);
+        } else if (reportConfig.type === 'range') {
+            if (!reportConfig.start || !reportConfig.end) return alert('Tarih aralığı seçin');
+            title += ` (${reportConfig.start} - ${reportConfig.end})`;
+            filteredShifts = filteredShifts.filter(s => s.shift_date >= reportConfig.start && s.shift_date <= reportConfig.end);
+        }
+
+        doc.text(title, 14, 15);
+
+        // Group by User then Date
+        const data = [];
+        // Sort by Date then User
+        filteredShifts.sort((a, b) => a.shift_date.localeCompare(b.shift_date) || a.user_id - b.user_id);
+
+        filteredShifts.forEach(s => {
+            const user = users.find(u => u.id === s.user_id);
+            if (user) {
+                data.push([
+                    s.shift_date,
+                    user.full_name,
+                    `NOT_IZM_${user.agent_number}`,
+                    `${s.start_time} - ${s.end_time}`,
+                    s.special_status || 'Mesai'
+                ]);
+            }
         });
+
+        if (data.length === 0) {
+            alert('Seçilen kriterlere uygun veri bulunamadı.');
+            return;
+        }
 
         doc.autoTable({
             startY: 20,
-            head: [['Agent No', 'İsim Soyisim', 'Vardiya', 'Durum']],
-            body: tableBody,
+            head: [['Tarih', 'İsim', 'Sicil No', 'Saatler', 'Durum']],
+            body: data,
         });
 
-        doc.save(`vardiya_${selectedDate}.pdf`);
+        doc.save(`vardiya_raporu_${new Date().getTime()}.pdf`);
+        setShowReportModal(false);
     };
 
     const getTimelinePos = (timeStr) => {
@@ -160,7 +193,7 @@ export default function AdminShifts() {
                     <p className="page-subtitle">Sürükle bırak ile kolayca planlama yapın</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn btn-secondary" onClick={downloadPDF}>📄 PDF İndir</button>
+                    <button className="btn btn-secondary" onClick={() => setShowReportModal(true)}>📄 PDF İndir</button>
                     <button className="btn btn-primary" onClick={handleBulkAssign}>🚀 Toplu Atama</button>
                 </div>
             </div>
@@ -204,7 +237,7 @@ export default function AdminShifts() {
 
                 <div className="grid-body">
                     {users.map(u => {
-                        const shift = shifts.find(s => s.user_id === u.id);
+                        // Removed single find, now using filter inside the render
                         return (
                             <div
                                 key={u.id}
@@ -232,16 +265,21 @@ export default function AdminShifts() {
                                                     const doc = new jsPDF();
                                                     doc.text(`Vardiya Belgesi - ${u.full_name}`, 14, 15);
                                                     doc.text(`Tarih: ${selectedDate}`, 14, 25);
+
+                                                    const userShifts = shifts.filter(s => s.user_id === u.id).sort((a, b) => a.start_time.localeCompare(b.start_time));
+                                                    const bodyData = userShifts.map(s => [
+                                                        `NOT_IZM_${u.agent_number}`,
+                                                        u.full_name,
+                                                        `${s.start_time} - ${s.end_time}`,
+                                                        s.special_status || 'Mesai'
+                                                    ]);
+
+                                                    if (bodyData.length === 0) bodyData.push(['-', '-', 'Atanmadı', '-']);
+
                                                     doc.autoTable({
                                                         startY: 35,
-                                                        head: [['Kriter', 'Bilgi']],
-                                                        body: [
-                                                            ['Agent No', `NOT_IZM_${u.agent_number}`],
-                                                            ['İsim Soyisim', u.full_name],
-                                                            ['Mesai Başlangıç', shift?.start_time || 'Atanmadı'],
-                                                            ['Mesai Bitiş', shift?.end_time || 'Atanmadı'],
-                                                            ['Özel Durum', shift?.special_status || '-']
-                                                        ]
+                                                        head: [['Agent No', 'İsim Soyisim', 'Vardiya', 'Durum']],
+                                                        body: bodyData
                                                     });
                                                     doc.save(`vardiya_${u.agent_number}_${selectedDate}.pdf`);
                                                 }}
@@ -250,19 +288,21 @@ export default function AdminShifts() {
                                     </div>
                                 </div>
                                 <div className="timeline-cell">
-                                    {shift && (
+                                    {shifts.filter(s => s.user_id === u.id).map(shift => (
                                         <div
+                                            key={shift.id}
                                             className="shift-bar"
                                             style={{
                                                 left: `${getTimelinePos(shift.start_time)}%`,
                                                 width: `${getTimelinePos(shift.end_time) - getTimelinePos(shift.start_time)}%`,
-                                                backgroundColor: shift.special_status === 'İzin' ? '#ef4444' : '#6366f1'
+                                                backgroundColor: shift.special_status === 'İzin' ? '#ef4444' : shift.special_status === 'Eğitim' ? '#f59e0b' : shift.special_status === 'Raporlu' ? '#ef4444' : '#6366f1'
                                             }}
-                                            onClick={() => setEditingShift(shift)}
+                                            onClick={(e) => { e.stopPropagation(); setEditingShift(shift); }}
+                                            title={`${shift.start_time} - ${shift.end_time} (${shift.special_status || 'Mesai'})`}
                                         >
-                                            <span className="time-text">{shift.start_time} - {shift.end_time}</span>
+                                            <span className="time-text">{shift.special_status || `${shift.start_time} - ${shift.end_time}`}</span>
                                         </div>
-                                    )}
+                                    ))}
                                 </div>
                             </div>
                         );
@@ -334,34 +374,38 @@ export default function AdminShifts() {
                     </div>
                 </div>
             )}
-            {selectedAgent && (
-                <div className="modal-overlay" onClick={() => setSelectedAgent(null)}>
+
+            {showReportModal && (
+                <div className="modal-overlay" onClick={() => setShowReportModal(false)}>
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3 className="modal-title">{selectedAgent.full_name} - Toplu İşlem</h3>
-                            <button className="modal-close" onClick={() => setSelectedAgent(null)}>×</button>
+                            <h3 className="modal-title">Rapor Oluştur</h3>
+                            <button className="modal-close" onClick={() => setShowReportModal(false)}>×</button>
                         </div>
                         <div className="modal-body">
                             <div className="form-group">
-                                <label className="form-label">Başlangıç Tarihi</label>
-                                <input type="date" className="form-input" value={agentDateRange.start} onChange={e => setAgentDateRange({ ...agentDateRange, start: e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Bitiş Tarihi</label>
-                                <input type="date" className="form-input" value={agentDateRange.end} onChange={e => setAgentDateRange({ ...agentDateRange, end: e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Durum</label>
-                                <select className="form-select" value={agentDateRange.status} onChange={e => setAgentDateRange({ ...agentDateRange, status: e.target.value })}>
-                                    <option value="Raporlu">Raporlu</option>
-                                    <option value="İzinli">İzinli</option>
-                                    <option value="Eğitim">Eğitim</option>
+                                <label className="form-label">Rapor Tipi</label>
+                                <select className="form-select" value={reportConfig.type} onChange={e => setReportConfig({ ...reportConfig, type: e.target.value })}>
+                                    <option value="daily">Seçili Gün ({selectedDate})</option>
+                                    <option value="range">Tarih Aralığı</option>
                                 </select>
                             </div>
+                            {reportConfig.type === 'range' && (
+                                <>
+                                    <div className="form-group">
+                                        <label className="form-label">Başlangıç</label>
+                                        <input type="date" className="form-input" value={reportConfig.start} onChange={e => setReportConfig({ ...reportConfig, start: e.target.value })} />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Bitiş</label>
+                                        <input type="date" className="form-input" value={reportConfig.end} onChange={e => setReportConfig({ ...reportConfig, end: e.target.value })} />
+                                    </div>
+                                </>
+                            )}
                         </div>
                         <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setSelectedAgent(null)}>İptal</button>
-                            <button className="btn btn-primary" onClick={handleAgentBulkAction}>Uygula</button>
+                            <button className="btn btn-secondary" onClick={() => setShowReportModal(false)}>İptal</button>
+                            <button className="btn btn-primary" onClick={handleGenerateReport}>İndir</button>
                         </div>
                     </div>
                 </div>

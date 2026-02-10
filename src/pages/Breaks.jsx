@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
+import './Breaks.css';
 
 export default function Breaks() {
     const { user } = useAuth();
@@ -52,22 +53,19 @@ export default function Breaks() {
         loadData();
     };
 
-    const timeSlots = [];
-    for (let h = 11; h <= 22; h++) {
-        for (let m = 0; m < 60; m += 10) {
-            if (h === 22 && m > 0) break;
-            timeSlots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
-        }
-    }
+    const getTimelinePos = (timeStr) => {
+        if (!timeStr) return 0;
+        const [h, m] = timeStr.split(':').map(Number);
+        const totalMinutes = (h - 11) * 60 + m;
+        return (totalMinutes / 660) * 100;
+    };
 
-    const formatSeconds = (seconds) => {
-        const m = Math.floor(seconds / 60);
-        const s = seconds % 60;
-        return `${m}:${s.toString().padStart(2, '0')}`;
+    const getTimelineWidth = (duration) => {
+        return (duration / 660) * 100;
     };
 
     return (
-        <div className="page">
+        <div className="page breaks-page">
             <div className="page-header">
                 <div>
                     <h1 className="page-title">☕ Molalarım</h1>
@@ -75,16 +73,20 @@ export default function Breaks() {
                 </div>
             </div>
 
-            <div className="grid grid-2">
-                <div className="card">
+            <div className="breaks-grid">
+                <div className="break-card">
                     <h3 className="card-title">Mola Planla</h3>
                     <div style={{ marginTop: 16 }}>
                         <div className="form-group">
-                            <label className="form-label">Saat (10 dk aralıklarla)</label>
-                            <select className="form-select" value={selectedTime} onChange={e => setSelectedTime(e.target.value)}>
-                                <option value="">Seçin...</option>
-                                {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
+                            <label className="form-label">Başlangıç Saati</label>
+                            <input
+                                type="time"
+                                className="form-input"
+                                value={selectedTime}
+                                onChange={e => setSelectedTime(e.target.value)}
+                                min="11:00"
+                                max="22:00"
+                            />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Süre Seçimi</label>
@@ -95,7 +97,7 @@ export default function Breaks() {
                                     disabled={summary && summary.remaining10 <= 0}
                                     style={{ flex: 1 }}
                                 >
-                                    10 dk
+                                    10 dk ({summary?.remaining10 || 6} hak)
                                 </button>
                                 <button
                                     className={`btn ${selectedDuration === 30 ? 'btn-primary' : 'btn-secondary'}`}
@@ -103,7 +105,7 @@ export default function Breaks() {
                                     disabled={summary && summary.remaining30 <= 0}
                                     style={{ flex: 1 }}
                                 >
-                                    30 dk
+                                    30 dk ({summary?.remaining30 || 1} hak)
                                 </button>
                             </div>
                         </div>
@@ -117,26 +119,21 @@ export default function Breaks() {
                             <div className="progress-bar" style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
                                 <div style={{ width: `${(summary.usedMinutes / 60) * 100}%`, height: '100%', background: 'var(--success)' }}></div>
                             </div>
-                            <div style={{ display: 'flex', gap: 12, marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-                                <span>10dk Hak: {summary.remaining10 || 6}</span>
-                                <span>30dk Hak: {summary.remaining30 || 1}</span>
-                            </div>
                         </div>
                     )}
                 </div>
 
-                <div className="card">
+                <div className="break-card" style={{ flex: 1 }}>
                     <h3 className="card-title">Bugünkü Molalarım</h3>
                     <div style={{ marginTop: 16 }}>
                         {breaks.length === 0 && <p style={{ color: 'var(--text-muted)' }}>Planlanmış mola yok.</p>}
                         {breaks.map(b => (
                             <div key={b.id} style={{ padding: 12, background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                 <div>
-                                    <span style={{ fontWeight: 600 }}>{b.start_time}</span>
+                                    <span style={{ fontWeight: 600 }}>{b.start_time} - {b.end_time || '-'}</span>
                                     <span className={`badge ${b.status === 'active' ? 'badge-warning' : b.status === 'completed' ? 'badge-success' : 'badge-neutral'}`} style={{ marginLeft: 8 }}>
                                         {b.duration_minutes} dk - {b.status === 'scheduled' ? 'Planlandı' : b.status === 'active' ? 'Aktif' : b.status === 'completed' ? 'Tamamlandı' : 'İptal'}
                                     </span>
-                                    {b.status === 'active' && <span style={{ marginLeft: 12, fontVariantNumeric: 'tabular-nums' }}>⏱️ {formatSeconds(breakTimer)}</span>}
                                 </div>
                                 <div style={{ display: 'flex', gap: 8 }}>
                                     {b.status === 'scheduled' && <button className="btn btn-success btn-sm" onClick={() => startBreak(b.id)}>Başlat</button>}
@@ -149,35 +146,41 @@ export default function Breaks() {
                 </div>
             </div>
 
-            <div className="card" style={{ marginTop: 20 }}>
-                <h3 className="card-title">Takım Mola Durumu</h3>
-                <div className="timeline-container" style={{ position: 'relative', marginTop: 16 }}>
-                    <div className="timeline-red-line" style={{
-                        position: 'absolute',
-                        top: 0,
-                        bottom: 0,
-                        width: '2px',
-                        backgroundColor: '#ef4444',
-                        zIndex: 10,
-                        left: `${((currentTime.getHours() - 11) * 60 + currentTime.getMinutes()) / (11 * 60) * 100}%`,
-                        display: (currentTime.getHours() >= 11 && currentTime.getHours() < 22) ? 'block' : 'none',
-                        transition: 'left 0.3s ease'
-                    }}>
-                        <div style={{ position: 'absolute', top: -20, left: -25, background: '#ef4444', color: 'white', fontSize: 10, padding: '2px 4px', borderRadius: 4, whiteSpace: 'nowrap' }}>
-                            {currentTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                        </div>
+            <div className="break-card" style={{ marginTop: 20 }}>
+                <h3 className="card-title">Takım Mola Durumu (Timeline)</h3>
+                <div className="timeline-container">
+                    {/* Time Axis */}
+                    <div className="timeline-axis">
+                        {Array.from({ length: 12 }, (_, i) => 11 + i).map(h => (
+                            <div key={h} className="hour-mark">{h}:00</div>
+                        ))}
                     </div>
-                    <div className="timeline" style={{ overflowX: 'auto', display: 'flex' }}>
-                        {timeSlots.map(time => {
-                            const slotBreaks = teamBreaks.filter(b => b.start_time === time);
-                            const myBreak = slotBreaks.find(b => b.user_id === user?.id);
-                            return (
-                                <div key={time} className={`timeline-slot ${myBreak ? 'my-break' : slotBreaks.length > 0 ? 'taken' : ''}`} title={slotBreaks.map(b => b.full_name).join(', ')}>
-                                    {time.split(':')[1] === '00' ? time : time.split(':')[1]}
-                                    {slotBreaks.length > 0 && <div style={{ fontSize: 10 }}>{slotBreaks.length}👤</div>}
-                                </div>
-                            );
-                        })}
+
+                    {/* Current Time Line */}
+                    {currentTime.getHours() >= 11 && currentTime.getHours() < 22 && (
+                        <div className="current-time-line" style={{ left: `${((currentTime.getHours() - 11) * 60 + currentTime.getMinutes()) / 660 * 100}%` }}>
+                            <div className="time-badge">
+                                {currentTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Break Tracks */}
+                    <div className="timeline-track">
+                        {teamBreaks.map(b => (
+                            <div
+                                key={b.id}
+                                className={`break-block ${b.user_id === user?.id ? 'my-break' : ''}`}
+                                style={{
+                                    left: `${getTimelinePos(b.start_time)}%`,
+                                    width: `${getTimelineWidth(b.duration_minutes)}%`,
+                                    top: b.user_id !== user?.id && teamBreaks.find(ob => ob.id !== b.id && ob.start_time === b.start_time) ? '28px' : '5px' // Simple overlap handling
+                                }}
+                                title={`${b.full_name}: ${b.start_time} (${b.duration_minutes}dk)`}
+                            >
+                                {b.user_id === user?.id ? 'Ben' : b.full_name.split(' ')[0]}
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>

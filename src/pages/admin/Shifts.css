@@ -60,18 +60,24 @@
     flex: 1;
     font-size: 11px;
     color: var(--text-muted);
-    padding: 12px 0 12px 4px;
-    border-left: 1px solid rgba(255, 255, 255, 0.05);
+    width: 0;
+    text-align: center;
+    overflow: visible;
+    flex-shrink: 0;
 }
 
+/* Grid Body */
 .grid-body {
-    max-height: 500px;
-    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .grid-row {
     display: flex;
-    border-bottom: 1px solid var(--border);
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 8px;
 }
 
 .grid-row:hover {
@@ -79,10 +85,10 @@
 }
 
 .agent-cell {
-    width: 250px;
-    padding: 12px 20px;
-    border-right: 1px solid var(--border);
-    background: rgba(0, 0, 0, 0.05);
+    width: 220px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border-color);
+    padding-right: 12px;
 }
 
 .agent-mini-info .name {
@@ -96,27 +102,38 @@
 }
 
 .timeline-cell {
-    flex: 1;
+    flex-grow: 1;
+    height: 40px;
+    background-color: rgba(255, 255, 255, 0.02);
+    border-radius: var(--radius-sm);
     position: relative;
-    height: 60px;
-    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.01) 100%);
+    margin-left: 12px;
+    /* Grid Lines */
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: calc(100% / 11) 100%;
+    /* 11 hours = 11 spaces */
 }
 
+/* Shift Bar */
 .shift-bar {
     position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    height: 32px;
-    border-radius: 6px;
+    top: 4px;
+    bottom: 4px;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 500;
     cursor: pointer;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    transition: filter 0.2s, transform 0.1s;
+    transition: transform 0.2s, box-shadow 0.2s;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding: 0 4px;
+    z-index: 2;
 }
 
 .shift-bar:hover {

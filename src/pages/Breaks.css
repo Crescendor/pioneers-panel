@@ -1,0 +1,109 @@
+.breaks-page {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    padding-bottom: 20px;
+}
+
+.breaks-grid {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 20px;
+}
+
+.break-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    height: 100%;
+}
+
+.timeline-container {
+    position: relative;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: var(--radius-sm);
+    height: 100px;
+    margin-top: 20px;
+    border: 1px solid var(--border-color);
+    /* Grid Lines */
+    background-image: linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    background-size: calc(100% / 11) 100%;
+}
+
+.timeline-axis {
+    display: flex;
+    justify-content: space-between;
+    padding: 0;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 11px;
+    color: var(--text-muted);
+    height: 24px;
+}
+
+.hour-mark {
+    width: 0;
+    text-align: center;
+    overflow: visible;
+    flex-shrink: 0;
+}
+
+.timeline-track {
+    position: relative;
+    height: 60px;
+    margin-top: 8px;
+}
+
+.break-block {
+    position: absolute;
+    top: 5px;
+    bottom: 5px;
+    border-radius: 4px;
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: white;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    white-space: nowrap;
+    z-index: 1;
+}
+
+.break-block.my-break {
+    background: var(--success);
+    z-index: 2;
+    border: 2px solid white;
+}
+
+.break-block:hover {
+    z-index: 10;
+    transform: scaleY(1.1);
+}
+
+.current-time-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: var(--danger);
+    z-index: 5;
+    pointer-events: none;
+}
+
+.time-badge {
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--danger);
+    color: white;
+    font-size: 10px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
