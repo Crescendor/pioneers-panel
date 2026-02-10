@@ -1,0 +1,182 @@
+.admin-shifts .shifts-controls {
+    display: flex;
+    gap: 20px;
+    align-items: flex-end;
+    margin-bottom: 24px;
+    padding: 20px;
+    background: var(--card-bg);
+}
+
+.templates-pool {
+    display: flex;
+    gap: 12px;
+    margin-left: auto;
+}
+
+.shift-template {
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    color: white;
+    cursor: grab;
+    font-size: 13px;
+    font-weight: 600;
+    transition: transform 0.2s, box-shadow 0.2s;
+    user-select: none;
+}
+
+.shift-template:active {
+    cursor: grabbing;
+    transform: scale(0.95);
+}
+
+.shift-template:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.shifts-grid {
+    padding: 0;
+    overflow: hidden;
+}
+
+.grid-header {
+    display: flex;
+    background: rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid var(--border);
+}
+
+.agent-col {
+    width: 250px;
+    padding: 12px 20px;
+    border-right: 1px solid var(--border);
+    font-weight: 600;
+}
+
+.timeline-axis {
+    flex: 1;
+    display: flex;
+}
+
+.hour-mark {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 12px 0 12px 4px;
+    border-left: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.grid-body {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.grid-row {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+}
+
+.grid-row:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.agent-cell {
+    width: 250px;
+    padding: 12px 20px;
+    border-right: 1px solid var(--border);
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.agent-mini-info .name {
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.agent-mini-info .id {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.timeline-cell {
+    flex: 1;
+    position: relative;
+    height: 60px;
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.01) 100%);
+}
+
+.shift-bar {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 32px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: filter 0.2s, transform 0.1s;
+}
+
+.shift-bar:hover {
+    filter: brightness(1.2);
+    transform: translateY(-50%) scale(1.02);
+}
+
+.shift-bar .time-text {
+    pointer-events: none;
+}
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal {
+    background: var(--card-bg);
+    width: 100%;
+    max-width: 400px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    animation: modalIn 0.3s ease-out;
+}
+
+@keyframes modalIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.modal-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-footer {
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.2);
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+}

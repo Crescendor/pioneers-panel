@@ -16,6 +16,7 @@ import AdminShifts from './pages/admin/Shifts';
 import AdminNotes from './pages/admin/Notes';
 import AdminReports from './pages/admin/Reports';
 import AdminRequests from './pages/admin/Requests';
+import MyTeam from './pages/admin/MyTeam';
 
 function PrivateRoute({ children, roles }) {
     const { user, loading } = useAuth();
@@ -49,6 +50,7 @@ function App() {
                         <Route path="admin/notes" element={<PrivateRoute roles={['SuperAdmin', 'TeamLead']}><AdminNotes /></PrivateRoute>} />
                         <Route path="admin/reports" element={<PrivateRoute roles={['SuperAdmin', 'TeamLead']}><AdminReports /></PrivateRoute>} />
                         <Route path="admin/requests" element={<PrivateRoute roles={['SuperAdmin', 'TeamLead']}><AdminRequests /></PrivateRoute>} />
+                        <Route path="admin/team-monitoring" element={<PrivateRoute roles={['SuperAdmin', 'TeamLead']}><MyTeam /></PrivateRoute>} />
                     </Route>
                 </Routes>
             </BrowserRouter>

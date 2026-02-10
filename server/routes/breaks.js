@@ -12,12 +12,16 @@ router.get('/me/today', authenticateToken, (req, res) => {
       SELECT * FROM breaks WHERE user_id = ? AND break_date = ? ORDER BY start_time
     `).all(req.user.id, today);
 
-        const used10 = breaks.filter(b => b.duration_minutes === 10 && b.status !== 'cancelled').length;
-        const used30 = breaks.filter(b => b.duration_minutes === 30 && b.status !== 'cancelled').length;
+        const totalUsedMinutes = breaks
+            .filter(b => b.status !== 'cancelled')
+            .reduce((sum, b) => sum + b.duration_minutes, 0);
 
         res.json({
             breaks,
-            summary: { remaining10: 6 - used10, remaining30: 1 - used30 }
+            summary: {
+                usedMinutes: totalUsedMinutes,
+                remainingMinutes: 60 - totalUsedMinutes
+            }
         });
     } catch (err) {
         console.error(err);
@@ -48,19 +52,30 @@ router.post('/', authenticateToken, (req, res) => {
         const { start_time, duration_minutes } = req.body;
         const today = new Date().toISOString().split('T')[0];
 
-        // Check daily limits
+        // Check daily limits (max 60m)
         const existing = db.prepare(`
       SELECT duration_minutes FROM breaks WHERE user_id = ? AND break_date = ? AND status != 'cancelled'
     `).all(req.user.id, today);
 
-        const used10 = existing.filter(b => b.duration_minutes === 10).length;
-        const used30 = existing.filter(b => b.duration_minutes === 30).length;
+        const usedMinutes = existing.reduce((sum, b) => sum + b.duration_minutes, 0);
 
-        if (duration_minutes === 10 && used10 >= 6) {
-            return res.status(400).json({ error: '10 dakikalık mola hakkınız doldu (6/6)' });
+        if (usedMinutes + duration_minutes > 60) {
+            return res.status(400).json({ error: `Günlük mola limitiniz (60 dk) aşılamaz. Kalan: ${60 - usedMinutes} dk` });
         }
-        if (duration_minutes === 30 && used30 >= 1) {
-            return res.status(400).json({ error: '30 dakikalık mola hakkınız doldu (1/1)' });
+
+        // Conflict check: Team concurrent limit (e.g., 2 people)
+        const concurrentBreaks = db.prepare(`
+            SELECT COUNT(*) as count 
+            FROM breaks b 
+            JOIN users u ON b.user_id = u.id 
+            WHERE u.team_id = (SELECT team_id FROM users WHERE id = ?) 
+            AND b.break_date = ? 
+            AND b.start_time = ? 
+            AND b.status != 'cancelled'
+        `).get(req.user.id, today, start_time);
+
+        if (concurrentBreaks.count >= 2) {
+            return res.status(400).json({ error: 'Bu saat dilimi için mola kontenjanı dolu' });
         }
 
         const result = db.prepare(`
@@ -79,13 +94,8 @@ router.post('/', authenticateToken, (req, res) => {
 router.put('/:id/start', authenticateToken, (req, res) => {
     try {
         db.prepare(`
-      UPDATE breaks SET status = 'active', actual_start = datetime('now') WHERE id = ? AND user_id = ?
+      UPDATE breaks SET status = 'active', actual_start = datetime('now', 'localtime') WHERE id = ? AND user_id = ?
     `).run(req.params.id, req.user.id);
-
-        // Pause work session
-        db.prepare(`
-      UPDATE work_sessions SET status = 'paused' WHERE user_id = ? AND session_date = date('now') AND status = 'active'
-    `).run(req.user.id);
 
         res.json({ message: 'Mola başladı' });
     } catch (err) {
@@ -98,13 +108,8 @@ router.put('/:id/start', authenticateToken, (req, res) => {
 router.put('/:id/end', authenticateToken, (req, res) => {
     try {
         db.prepare(`
-      UPDATE breaks SET status = 'completed', actual_end = datetime('now') WHERE id = ? AND user_id = ?
+      UPDATE breaks SET status = 'completed', actual_end = datetime('now', 'localtime') WHERE id = ? AND user_id = ?
     `).run(req.params.id, req.user.id);
-
-        // Resume work session
-        db.prepare(`
-      UPDATE work_sessions SET status = 'active' WHERE user_id = ? AND session_date = date('now') AND status = 'paused'
-    `).run(req.user.id);
 
         res.json({ message: 'Mola bitti' });
     } catch (err) {

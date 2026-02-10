@@ -9,6 +9,12 @@ export default function Breaks() {
     const [teamBreaks, setTeamBreaks] = useState([]);
     const [selectedTime, setSelectedTime] = useState('');
     const [selectedDuration, setSelectedDuration] = useState(10);
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+        return () => clearInterval(timer);
+    }, []);
 
     useEffect(() => { loadData(); }, []);
 
@@ -48,9 +54,17 @@ export default function Breaks() {
 
     const timeSlots = [];
     for (let h = 11; h <= 22; h++) {
-        timeSlots.push(`${h.toString().padStart(2, '0')}:00`);
-        if (h < 22) timeSlots.push(`${h.toString().padStart(2, '0')}:30`);
+        for (let m = 0; m < 60; m += 10) {
+            if (h === 22 && m > 0) break;
+            timeSlots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+        }
     }
+
+    const formatSeconds = (seconds) => {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    };
 
     return (
         <div className="page">
@@ -66,28 +80,34 @@ export default function Breaks() {
                     <h3 className="card-title">Mola Planla</h3>
                     <div style={{ marginTop: 16 }}>
                         <div className="form-group">
-                            <label className="form-label">Saat</label>
+                            <label className="form-label">Saat (10 dk aralıklarla)</label>
                             <select className="form-select" value={selectedTime} onChange={e => setSelectedTime(e.target.value)}>
                                 <option value="">Seçin...</option>
                                 {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Süre</label>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                                <button className={`btn ${selectedDuration === 10 ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setSelectedDuration(10)}>10 dk</button>
-                                <button className={`btn ${selectedDuration === 30 ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setSelectedDuration(30)}>30 dk</button>
-                            </div>
+                            <label className="form-label">Süre: {selectedDuration} dk</label>
+                            <input
+                                type="range"
+                                min="10"
+                                max="60"
+                                step="10"
+                                value={selectedDuration}
+                                onChange={e => setSelectedDuration(parseInt(e.target.value))}
+                                className="form-range"
+                                style={{ width: '100%', accentColor: 'var(--primary)' }}
+                            />
                         </div>
                         <button className="btn btn-success" onClick={scheduleBreak}>Mola Planla</button>
                     </div>
                     {summary && (
                         <div style={{ marginTop: 20, padding: 16, background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                <span>30 dk mola:</span><span>{1 - summary.remaining30}/1 kullanıldı</span>
+                                <span>Toplam Kullanılan:</span><span>{summary.usedMinutes} dk</span>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span>10 dk mola:</span><span>{6 - summary.remaining10}/6 kullanıldı</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: summary.remainingMinutes < 10 ? 'var(--danger)' : 'var(--success)' }}>
+                                <span>Kalan Hak:</span><span>{summary.remainingMinutes} dk</span>
                             </div>
                         </div>
                     )}
@@ -104,6 +124,7 @@ export default function Breaks() {
                                     <span className={`badge ${b.status === 'active' ? 'badge-warning' : b.status === 'completed' ? 'badge-success' : 'badge-neutral'}`} style={{ marginLeft: 8 }}>
                                         {b.duration_minutes} dk - {b.status === 'scheduled' ? 'Planlandı' : b.status === 'active' ? 'Aktif' : b.status === 'completed' ? 'Tamamlandı' : 'İptal'}
                                     </span>
+                                    {b.status === 'active' && <span style={{ marginLeft: 12, fontVariantNumeric: 'tabular-nums' }}>⏱️ {formatSeconds(breakTimer)}</span>}
                                 </div>
                                 <div style={{ display: 'flex', gap: 8 }}>
                                     {b.status === 'scheduled' && <button className="btn btn-success btn-sm" onClick={() => startBreak(b.id)}>Başlat</button>}
@@ -118,17 +139,34 @@ export default function Breaks() {
 
             <div className="card" style={{ marginTop: 20 }}>
                 <h3 className="card-title">Takım Mola Durumu</h3>
-                <div className="timeline" style={{ marginTop: 16 }}>
-                    {timeSlots.map(time => {
-                        const slotBreaks = teamBreaks.filter(b => b.start_time === time);
-                        const myBreak = slotBreaks.find(b => b.user_id === user?.id);
-                        return (
-                            <div key={time} className={`timeline-slot ${myBreak ? 'my-break' : slotBreaks.length > 0 ? 'taken' : ''}`} title={slotBreaks.map(b => b.full_name).join(', ')}>
-                                {time.split(':')[0]}:{time.split(':')[1]}
-                                {slotBreaks.length > 0 && <div style={{ fontSize: 10 }}>{slotBreaks.length}👤</div>}
-                            </div>
-                        );
-                    })}
+                <div className="timeline-container" style={{ position: 'relative', marginTop: 16 }}>
+                    <div className="timeline-red-line" style={{
+                        position: 'absolute',
+                        top: 0,
+                        bottom: 0,
+                        width: '2px',
+                        backgroundColor: '#ef4444',
+                        zIndex: 10,
+                        left: `${((currentTime.getHours() - 11) * 60 + currentTime.getMinutes()) / (11 * 60) * 100}%`,
+                        display: (currentTime.getHours() >= 11 && currentTime.getHours() < 22) ? 'block' : 'none',
+                        transition: 'left 0.3s ease'
+                    }}>
+                        <div style={{ position: 'absolute', top: -20, left: -25, background: '#ef4444', color: 'white', fontSize: 10, padding: '2px 4px', borderRadius: 4, whiteSpace: 'nowrap' }}>
+                            {currentTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                    </div>
+                    <div className="timeline" style={{ overflowX: 'auto', display: 'flex' }}>
+                        {timeSlots.map(time => {
+                            const slotBreaks = teamBreaks.filter(b => b.start_time === time);
+                            const myBreak = slotBreaks.find(b => b.user_id === user?.id);
+                            return (
+                                <div key={time} className={`timeline-slot ${myBreak ? 'my-break' : slotBreaks.length > 0 ? 'taken' : ''}`} title={slotBreaks.map(b => b.full_name).join(', ')}>
+                                    {time.split(':')[1] === '00' ? time : time.split(':')[1]}
+                                    {slotBreaks.length > 0 && <div style={{ fontSize: 10 }}>{slotBreaks.length}👤</div>}
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
             </div>
         </div>

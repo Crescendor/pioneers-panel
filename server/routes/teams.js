@@ -87,4 +87,67 @@ router.delete('/:id', authenticateToken, requireRole('SuperAdmin'), (req, res) =
     }
 });
 
+// Get team monitoring data
+router.get('/:id/monitoring', authenticateToken, requireRole('SuperAdmin', 'TeamLead'), (req, res) => {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const users = db.prepare(`
+            SELECT id, full_name, agent_number 
+            FROM users 
+            WHERE team_id = ?
+        `).all(req.params.id);
+
+        const data = users.map(user => {
+            const session = db.prepare(`
+                SELECT start_time, end_time, status 
+                FROM work_sessions 
+                WHERE user_id = ? AND session_date = ?
+            `).get(user.id, today);
+
+            const breaks = db.prepare(`
+                SELECT id, start_time as scheduled_start, actual_start, actual_end, duration_minutes, status
+                FROM breaks
+                WHERE user_id = ? AND break_date = ? AND status != 'cancelled'
+            `).all(user.id, today);
+
+            // Calculate current status
+            let currentStatus = 'idle';
+            if (session) {
+                if (session.status === 'completed') {
+                    currentStatus = 'completed';
+                } else {
+                    const activeBreak = breaks.find(b => b.status === 'active');
+                    if (activeBreak) {
+                        currentStatus = 'break';
+                    } else {
+                        currentStatus = session.status;
+                    }
+                }
+            }
+
+            return {
+                ...user,
+                current_status: currentStatus,
+                session_start: session?.start_time,
+                session_end: session?.end_time,
+                breaks: breaks.map(b => {
+                    // Estimate end time for scheduled/active breaks for visuals
+                    const start = b.actual_start || (`${today} ${b.scheduled_start}`);
+                    const startDate = new Date(start);
+                    const endDate = new Date(startDate.getTime() + b.duration_minutes * 60000);
+                    return {
+                        ...b,
+                        scheduled_end: endDate.toISOString()
+                    };
+                })
+            };
+        });
+
+        res.json(data);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Sunucu hatası' });
+    }
+});
+
 export default router;

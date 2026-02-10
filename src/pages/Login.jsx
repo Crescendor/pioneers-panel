@@ -8,6 +8,7 @@ export default function Login() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [rememberMe, setRememberMe] = useState(true);
     const { login } = useAuth();
     const navigate = useNavigate();
 
@@ -16,7 +17,7 @@ export default function Login() {
         setError('');
         setLoading(true);
         try {
-            await login(agentNumber, password);
+            await login(agentNumber, password, rememberMe);
             navigate('/dashboard');
         } catch (err) {
             setError(err.response?.data?.error || 'Giriş başarısız');
@@ -61,6 +62,17 @@ export default function Login() {
                             placeholder="Şifrenizi girin"
                             required
                         />
+                    </div>
+
+                    <div className="form-group remember-me">
+                        <label className="checkbox-container">
+                            <input
+                                type="checkbox"
+                                checked={rememberMe}
+                                onChange={(e) => setRememberMe(e.target.checked)}
+                            />
+                            <span className="checkbox-label">Beni Hatırla</span>
+                        </label>
                     </div>
 
                     <button type="submit" className="btn btn-primary btn-lg login-btn" disabled={loading}>

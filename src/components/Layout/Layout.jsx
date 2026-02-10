@@ -77,6 +77,10 @@ export default function Layout() {
                                 <span className="nav-icon">🏢</span>
                                 <span>Takımlar</span>
                             </NavLink>
+                            <NavLink to="/admin/team-monitoring" className="nav-item" onClick={() => setSidebarOpen(false)}>
+                                <span className="nav-icon">👥</span>
+                                <span>Takımım</span>
+                            </NavLink>
                             <NavLink to="/admin/shifts" className="nav-item" onClick={() => setSidebarOpen(false)}>
                                 <span className="nav-icon">📆</span>
                                 <span>Vardiya Yönetimi</span>

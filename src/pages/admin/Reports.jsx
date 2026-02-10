@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 const CATEGORIES = ['General', 'Technical', 'Other Providers', 'Customer Behavior'];
 const IMPACTS = ['High', 'Medium', 'Low'];
@@ -96,6 +98,23 @@ export default function AdminReports() {
                     <p className="page-subtitle">Takım raporlarını inceleyin ve yönetin</p>
                 </div>
                 <div style={{ display: 'flex', gap: 12 }}>
+                    <button className="btn btn-secondary" onClick={() => {
+                        const doc = new jsPDF();
+                        doc.text('Vaka Raporlari', 14, 15);
+                        doc.autoTable({
+                            startY: 20,
+                            head: [['Tarih', 'Agent', 'Vaka ID', 'Kategori', 'Etki', 'Sure']],
+                            body: reports.map(r => [
+                                new Date(r.report_date).toLocaleDateString('tr-TR'),
+                                `${r.full_name} (${r.agent_number})`,
+                                r.case_id,
+                                r.category,
+                                r.impact,
+                                `${r.duration_minutes} dk`
+                            ])
+                        });
+                        doc.save('vaka_raporlari.pdf');
+                    }}>📄 PDF İndir</button>
                     <button className="btn btn-secondary" onClick={downloadReport} disabled={!selectedTeam}>📥 Excel İndir</button>
                 </div>
             </div>

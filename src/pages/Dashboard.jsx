@@ -21,20 +21,28 @@ export default function Dashboard() {
 
     useEffect(() => {
         let interval;
-        if (session?.status === 'active') {
-            interval = setInterval(() => setTimer(t => t + 1), 1000);
+        if (session?.status && session.status !== 'idle' && session.status !== 'completed') {
+            const calculateTime = () => {
+                const start = new Date(session.start_time).getTime();
+                const now = Date.now();
+                setTimer(Math.floor((now - start) / 1000));
+            };
+            calculateTime();
+            interval = setInterval(calculateTime, 1000);
         }
         return () => clearInterval(interval);
-    }, [session?.status]);
+    }, [session?.start_time, session?.status]);
 
     useEffect(() => {
         let interval;
-        if (activeBreak) {
-            const remaining = activeBreak.duration_minutes * 60;
-            setBreakTimer(remaining);
-            interval = setInterval(() => {
-                setBreakTimer(t => t > 0 ? t - 1 : 0);
-            }, 1000);
+        if (activeBreak && activeBreak.status === 'active') {
+            const calculateBreakTime = () => {
+                const start = new Date(activeBreak.actual_start).getTime();
+                const now = Date.now();
+                setBreakTimer(Math.floor((now - start) / 1000));
+            };
+            calculateBreakTime();
+            interval = setInterval(calculateBreakTime, 1000);
         }
         return () => clearInterval(interval);
     }, [activeBreak]);

@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
+import './Shifts.css';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 export default function AdminShifts() {
     const { user } = useAuth();
@@ -8,12 +11,19 @@ export default function AdminShifts() {
     const [users, setUsers] = useState([]);
     const [shifts, setShifts] = useState([]);
     const [selectedTeam, setSelectedTeam] = useState('');
-    const [selectedUsers, setSelectedUsers] = useState([]);
-    const [showForm, setShowForm] = useState(false);
-    const [form, setForm] = useState({ shift_date: '', start_time: '11:00', end_time: '20:00', special_status: '' });
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [editingShift, setEditingShift] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [draggedTemplate, setDraggedTemplate] = useState(null);
+
+    const shiftTemplates = [
+        { label: 'Sabah', start: '11:00', end: '20:00', color: '#6366f1' },
+        { label: 'Akşam', start: '13:00', end: '22:00', color: '#8b5cf6' },
+        { label: 'İzin', start: '00:00', end: '00:00', color: '#ef4444', isOff: true }
+    ];
 
     useEffect(() => { loadTeams(); }, []);
-    useEffect(() => { if (selectedTeam) loadTeamData(); }, [selectedTeam]);
+    useEffect(() => { if (selectedTeam) loadData(); }, [selectedTeam, selectedDate]);
 
     const loadTeams = async () => {
         const res = await api.get('/teams');
@@ -21,99 +31,234 @@ export default function AdminShifts() {
         if (user?.role === 'TeamLead') setSelectedTeam(user.team_id);
     };
 
-    const loadTeamData = async () => {
-        const [usersRes, shiftsRes] = await Promise.all([
-            api.get(`/users/team/${selectedTeam}`),
-            api.get(`/shifts/team/${selectedTeam}`)
-        ]);
-        setUsers(usersRes.data);
-        setShifts(shiftsRes.data);
+    const loadData = async () => {
+        setLoading(true);
+        try {
+            const [usersRes, shiftsRes] = await Promise.all([
+                api.get(`/users/team/${selectedTeam}`),
+                api.get(`/shifts/team/${selectedTeam}`)
+            ]);
+            setUsers(usersRes.data);
+            // Filter shifts for the selected date
+            setShifts(shiftsRes.data.filter(s => s.shift_date === selectedDate));
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const toggleUser = (id) => {
-        setSelectedUsers(prev => prev.includes(id) ? prev.filter(u => u !== id) : [...prev, id]);
+    const handleDragStart = (template) => {
+        setDraggedTemplate(template);
     };
 
-    const assignShifts = async () => {
-        if (!selectedUsers.length || !form.shift_date) return alert('Kullanıcı ve tarih seçin');
-        const shiftsToCreate = selectedUsers.map(user_id => ({
-            user_id, shift_date: form.shift_date, start_time: form.start_time, end_time: form.end_time,
-            special_status: form.special_status || null
+    const handleDrop = async (userId) => {
+        if (!draggedTemplate) return;
+        try {
+            const shiftData = {
+                user_id: userId,
+                shift_date: selectedDate,
+                start_time: draggedTemplate.start,
+                end_time: draggedTemplate.end,
+                special_status: draggedTemplate.isOff ? 'İzin' : null
+            };
+            await api.post('/shifts', shiftData);
+            loadData();
+        } catch (err) {
+            alert('Vardiya atanamadı');
+        } finally {
+            setDraggedTemplate(null);
+        }
+    };
+
+    const handleBulkAssign = async () => {
+        const password = prompt('Seçili tüm agentlara bu vardiyayı atamak istiyor musunuz? (Onay için "pioneers" yazın)');
+        if (password !== 'pioneers') return;
+
+        const start = prompt('Başlangıç saati (HH:mm)', '11:00');
+        const end = prompt('Bitiş saati (HH:mm)', '20:00');
+        if (!start || !end) return;
+
+        const shiftsToCreate = users.map(u => ({
+            user_id: u.id,
+            shift_date: selectedDate,
+            start_time: start,
+            end_time: end
         }));
+
         await api.post('/shifts/bulk', { shifts: shiftsToCreate });
-        setShowForm(false);
-        setSelectedUsers([]);
-        loadTeamData();
+        loadData();
+    };
+
+    const downloadPDF = () => {
+        const doc = new jsPDF();
+        doc.text(`Vardiya Planı - ${selectedDate}`, 14, 15);
+
+        const tableBody = users.map(u => {
+            const shift = shifts.find(s => s.user_id === u.id);
+            return [
+                `NOT_IZM_${u.agent_number}`,
+                u.full_name,
+                shift ? `${shift.start_time} - ${shift.end_time}` : 'Atanmadı',
+                shift?.special_status || '-'
+            ];
+        });
+
+        doc.autoTable({
+            startY: 20,
+            head: [['Agent No', 'İsim Soyisim', 'Vardiya', 'Durum']],
+            body: tableBody,
+        });
+
+        doc.save(`vardiya_${selectedDate}.pdf`);
+    };
+
+    const getTimelinePos = (timeStr) => {
+        if (!timeStr) return 0;
+        const [h, m] = timeStr.split(':').map(Number);
+        const totalMinutes = (h - 11) * 60 + m;
+        return (totalMinutes / (11 * 60)) * 100;
     };
 
     return (
-        <div className="page">
+        <div className="page admin-shifts">
             <div className="page-header">
                 <div>
-                    <h1 className="page-title">📆 Vardiya Yönetimi</h1>
-                    <p className="page-subtitle">Takım vardiyalarını atayın</p>
+                    <h1 className="page-title">📅 Vardiya Yönetimi</h1>
+                    <p className="page-subtitle">Sürükle bırak ile kolayca planlama yapın</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => setShowForm(true)}>+ Vardiya Ata</button>
+                <div className="header-actions">
+                    <button className="btn btn-secondary" onClick={downloadPDF}>📄 PDF İndir</button>
+                    <button className="btn btn-primary" onClick={handleBulkAssign}>🚀 Toplu Atama</button>
+                </div>
             </div>
 
-            {user?.role === 'SuperAdmin' && (
-                <div className="card" style={{ marginBottom: 20 }}>
-                    <select className="form-select" value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)}>
-                        <option value="">Takım seçin...</option>
+            <div className="shifts-controls card">
+                <div className="control-group">
+                    <label>Takım</label>
+                    <select className="form-select" value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)} disabled={user.role === 'TeamLead'}>
+                        <option value="">Takım Seçin...</option>
                         {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                 </div>
-            )}
-
-            {selectedTeam && (
-                <div className="card table-container">
-                    <table className="table">
-                        <thead><tr><th>Agent</th><th>İsim</th><th>Son Vardiya</th><th>Seç</th></tr></thead>
-                        <tbody>
-                            {users.map(u => {
-                                const lastShift = shifts.filter(s => s.user_id === u.id).sort((a, b) => b.shift_date.localeCompare(a.shift_date))[0];
-                                return (
-                                    <tr key={u.id}>
-                                        <td>NOT_IZM_{u.agent_number}</td>
-                                        <td>{u.full_name}</td>
-                                        <td>{lastShift ? `${lastShift.shift_date} ${lastShift.start_time}-${lastShift.end_time}` : '—'}</td>
-                                        <td><input type="checkbox" checked={selectedUsers.includes(u.id)} onChange={() => toggleUser(u.id)} /></td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                <div className="control-group">
+                    <label>Tarih</label>
+                    <input type="date" className="form-input" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
                 </div>
-            )}
-
-            {showForm && (
-                <div className="modal-overlay" onClick={() => setShowForm(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3 className="modal-title">Toplu Vardiya Ata</h3>
-                            <button className="modal-close" onClick={() => setShowForm(false)}>×</button>
+                <div className="templates-pool">
+                    {shiftTemplates.map(template => (
+                        <div
+                            key={template.label}
+                            className="shift-template"
+                            draggable
+                            onDragStart={() => handleDragStart(template)}
+                            style={{ backgroundColor: template.color }}
+                        >
+                            {template.label} ({template.start}-{template.end})
                         </div>
-                        <div className="modal-body">
-                            <p style={{ marginBottom: 16 }}>{selectedUsers.length} kullanıcı seçildi</p>
-                            <div className="form-group">
-                                <label className="form-label">Tarih</label>
-                                <input type="date" className="form-input" value={form.shift_date} onChange={e => setForm({ ...form, shift_date: e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Vardiya</label>
-                                <div style={{ display: 'flex', gap: 8 }}>
-                                    <button type="button" className={`btn ${form.start_time === '11:00' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setForm({ ...form, start_time: '11:00', end_time: '20:00' })}>11:00 - 20:00</button>
-                                    <button type="button" className={`btn ${form.start_time === '13:00' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setForm({ ...form, start_time: '13:00', end_time: '22:00' })}>13:00 - 22:00</button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="shifts-grid card">
+                <div className="grid-header">
+                    <div className="agent-col">Agent</div>
+                    <div className="timeline-axis">
+                        {Array.from({ length: 12 }, (_, i) => 11 + i).map(h => (
+                            <div key={h} className="hour-mark">{h}:00</div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="grid-body">
+                    {users.map(u => {
+                        const shift = shifts.find(s => s.user_id === u.id);
+                        return (
+                            <div
+                                key={u.id}
+                                className="grid-row"
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={() => handleDrop(u.id)}
+                            >
+                                <div className="agent-cell">
+                                    <div className="agent-mini-info">
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <div className="name">{u.full_name}</div>
+                                                <div className="id">NOT_IZM_{u.agent_number}</div>
+                                            </div>
+                                            <button
+                                                className="btn btn-sm btn-secondary"
+                                                style={{ padding: '4px 8px', fontSize: '12px' }}
+                                                onClick={() => {
+                                                    const doc = new jsPDF();
+                                                    doc.text(`Vardiya Belgesi - ${u.full_name}`, 14, 15);
+                                                    doc.text(`Tarih: ${selectedDate}`, 14, 25);
+                                                    doc.autoTable({
+                                                        startY: 35,
+                                                        head: [['Kriter', 'Bilgi']],
+                                                        body: [
+                                                            ['Agent No', `NOT_IZM_${u.agent_number}`],
+                                                            ['İsim Soyisim', u.full_name],
+                                                            ['Mesai Başlangıç', shift?.start_time || 'Atanmadı'],
+                                                            ['Mesai Bitiş', shift?.end_time || 'Atanmadı'],
+                                                            ['Özel Durum', shift?.special_status || '-']
+                                                        ]
+                                                    });
+                                                    doc.save(`vardiya_${u.agent_number}_${selectedDate}.pdf`);
+                                                }}
+                                            >📄</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="timeline-cell">
+                                    {shift && (
+                                        <div
+                                            className="shift-bar"
+                                            style={{
+                                                left: `${getTimelinePos(shift.start_time)}%`,
+                                                width: `${getTimelinePos(shift.end_time) - getTimelinePos(shift.start_time)}%`,
+                                                backgroundColor: shift.special_status === 'İzin' ? '#ef4444' : '#6366f1'
+                                            }}
+                                            onClick={() => setEditingShift(shift)}
+                                        >
+                                            <span className="time-text">{shift.start_time} - {shift.end_time}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
+                        );
+                    })}
+                </div>
+            </div>
+
+            {editingShift && (
+                <div className="modal-overlay" onClick={() => setEditingShift(null)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">Vardiyayı Düzenle</h3>
+                        </div>
+                        <div className="modal-body">
                             <div className="form-group">
-                                <label className="form-label">Özel Durum (opsiyonel)</label>
-                                <input className="form-input" value={form.special_status} onChange={e => setForm({ ...form, special_status: e.target.value })} placeholder="örn: Toplantı, Eğitim" />
+                                <label className="form-label">Başlangıç</label>
+                                <input type="time" className="form-input" value={editingShift.start_time} onChange={(e) => setEditingShift({ ...editingShift, start_time: e.target.value })} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Bitiş</label>
+                                <input type="time" className="form-input" value={editingShift.end_time} onChange={(e) => setEditingShift({ ...editingShift, end_time: e.target.value })} />
                             </div>
                         </div>
                         <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setShowForm(false)}>İptal</button>
-                            <button className="btn btn-primary" onClick={assignShifts}>Ata</button>
+                            <button className="btn btn-danger" onClick={async () => {
+                                await api.delete(`/shifts/${editingShift.id}`);
+                                setEditingShift(null);
+                                loadData();
+                            }}>Sil</button>
+                            <button className="btn btn-primary" onClick={async () => {
+                                await api.put(`/shifts/${editingShift.id}`, editingShift);
+                                setEditingShift(null);
+                                loadData();
+                            }}>Kaydet</button>
                         </div>
                     </div>
                 </div>
