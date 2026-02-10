@@ -5,7 +5,6 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Breaks from './pages/Breaks';
 import Reports from './pages/Reports';
-import Shifts from './pages/Shifts';
 import PioneersAI from './pages/PioneersAI';
 import Settings from './pages/Settings';
 import Notes from './pages/Notes';
