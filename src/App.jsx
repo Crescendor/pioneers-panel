@@ -16,7 +16,6 @@ import AdminShifts from './pages/admin/Shifts';
 import AdminNotes from './pages/admin/Notes';
 import AdminReports from './pages/admin/Reports';
 import AdminRequests from './pages/admin/Requests';
-import AdminRequests from './pages/admin/Requests';
 import MyTeam from './pages/admin/MyTeam';
 import MyShifts from './pages/MyShifts';
 
