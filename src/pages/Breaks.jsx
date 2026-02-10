@@ -2,11 +2,13 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
 import './Breaks.css';
+import './admin/Shifts.css'; // Reusing shift styles for grid layout
 
 export default function Breaks() {
     const { user } = useAuth();
     const [breaks, setBreaks] = useState([]);
     const [summary, setSummary] = useState(null);
+    const [teamMembers, setTeamMembers] = useState([]);
     const [teamBreaks, setTeamBreaks] = useState([]);
     const [selectedTime, setSelectedTime] = useState('');
     const [selectedDuration, setSelectedDuration] = useState(10);
@@ -21,13 +23,15 @@ export default function Breaks() {
 
     const loadData = async () => {
         try {
-            const [myRes, teamRes] = await Promise.all([
+            const [myRes, teamRes, membersRes] = await Promise.all([
                 api.get('/breaks/me/today'),
-                user?.team_id ? api.get(`/breaks/team/${user.team_id}/today`) : { data: { breaks: [] } }
+                user?.team_id ? api.get(`/breaks/team/${user.team_id}/today`) : { data: { breaks: [] } },
+                user?.team_id ? api.get(`/users/team/${user.team_id}`) : { data: [] }
             ]);
             setBreaks(myRes.data.breaks);
             setSummary(myRes.data.summary);
             setTeamBreaks(teamRes.data.breaks || []);
+            setTeamMembers(membersRes.data || []);
         } catch (err) { console.error(err); }
     };
 
@@ -111,16 +115,6 @@ export default function Breaks() {
                         </div>
                         <button className="btn btn-success" onClick={scheduleBreak} disabled={!selectedTime}>Mola Planla</button>
                     </div>
-                    {summary && (
-                        <div style={{ marginTop: 20, padding: 16, background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                <span>Toplam Kullanılan:</span><span>{summary.usedMinutes}/60 dk</span>
-                            </div>
-                            <div className="progress-bar" style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
-                                <div style={{ width: `${(summary.usedMinutes / 60) * 100}%`, height: '100%', background: 'var(--success)' }}></div>
-                            </div>
-                        </div>
-                    )}
                 </div>
 
                 <div className="break-card" style={{ flex: 1 }}>
@@ -146,41 +140,58 @@ export default function Breaks() {
                 </div>
             </div>
 
-            <div className="break-card" style={{ marginTop: 20 }}>
-                <h3 className="card-title">Takım Mola Durumu (Timeline)</h3>
-                <div className="timeline-container">
-                    {/* Time Axis */}
-                    <div className="timeline-axis">
-                        {Array.from({ length: 12 }, (_, i) => 11 + i).map(h => (
-                            <div key={h} className="hour-mark">{h}:00</div>
-                        ))}
+            <div className="card" style={{ marginTop: 20, padding: 0, overflow: 'hidden' }}>
+                <div style={{ padding: '20px 20px 0 20px' }}>
+                    <h3 className="card-title">Takım Mola Durumu</h3>
+                </div>
+
+                <div className="shifts-grid" style={{ marginTop: 20 }}>
+                    <div className="grid-header">
+                        <div className="agent-col">Agent</div>
+                        <div className="timeline-axis">
+                            {Array.from({ length: 12 }, (_, i) => 11 + i).map(h => (
+                                <div key={h} className="hour-mark">{h}:00</div>
+                            ))}
+                        </div>
                     </div>
 
-                    {/* Current Time Line */}
-                    {currentTime.getHours() >= 11 && currentTime.getHours() < 22 && (
-                        <div className="current-time-line" style={{ left: `${((currentTime.getHours() - 11) * 60 + currentTime.getMinutes()) / 660 * 100}%` }}>
-                            <div className="time-badge">
-                                {currentTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                            </div>
-                        </div>
-                    )}
+                    <div className="grid-body">
+                        {teamMembers.map(member => {
+                            const memberBreaks = teamBreaks.filter(b => b.user_id === member.id);
+                            return (
+                                <div key={member.id} className="grid-row">
+                                    <div className="agent-cell">
+                                        <span style={{ fontWeight: 500 }}>{member.full_name}</span>
+                                    </div>
+                                    <div className="timeline-cell">
+                                        {/* Current Time Line */}
+                                        {currentTime.getHours() >= 11 && currentTime.getHours() < 22 && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: 0, bottom: 0, width: 2, background: 'var(--danger)', zIndex: 20, pointerEvents: 'none',
+                                                left: `${((currentTime.getHours() - 11) * 60 + currentTime.getMinutes()) / 660 * 100}%`
+                                            }}></div>
+                                        )}
 
-                    {/* Break Tracks */}
-                    <div className="timeline-track">
-                        {teamBreaks.map(b => (
-                            <div
-                                key={b.id}
-                                className={`break-block ${b.user_id === user?.id ? 'my-break' : ''}`}
-                                style={{
-                                    left: `${getTimelinePos(b.start_time)}%`,
-                                    width: `${getTimelineWidth(b.duration_minutes)}%`,
-                                    top: b.user_id !== user?.id && teamBreaks.find(ob => ob.id !== b.id && ob.start_time === b.start_time) ? '28px' : '5px' // Simple overlap handling
-                                }}
-                                title={`${b.full_name}: ${b.start_time} (${b.duration_minutes}dk)`}
-                            >
-                                {b.user_id === user?.id ? 'Ben' : b.full_name.split(' ')[0]}
-                            </div>
-                        ))}
+                                        {memberBreaks.map(b => (
+                                            <div
+                                                key={b.id}
+                                                className={`break-block ${b.user_id === user?.id ? 'my-break' : ''}`}
+                                                style={{
+                                                    left: `${getTimelinePos(b.start_time)}%`,
+                                                    width: `${getTimelineWidth(b.duration_minutes)}%`,
+                                                    top: '5px', bottom: '5px', height: 'auto',
+                                                    background: b.status === 'active' ? 'var(--warning)' : b.status === 'completed' ? 'var(--success)' : 'var(--primary)'
+                                                }}
+                                                title={`${b.start_time} (${b.duration_minutes}dk)`}
+                                            >
+                                                {b.duration_minutes}dk
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
