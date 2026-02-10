@@ -42,7 +42,7 @@ export default function Layout() {
                             <span className="nav-icon">📊</span>
                             <span>Raporlarım</span>
                         </NavLink>
-                        <NavLink to="/shifts" className="nav-item" onClick={() => setSidebarOpen(false)}>
+                        <NavLink to="/my-shifts" className="nav-item" onClick={() => setSidebarOpen(false)}>
                             <span className="nav-icon">📅</span>
                             <span>Vardiyalarım</span>
                         </NavLink>

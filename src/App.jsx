@@ -16,7 +16,9 @@ import AdminShifts from './pages/admin/Shifts';
 import AdminNotes from './pages/admin/Notes';
 import AdminReports from './pages/admin/Reports';
 import AdminRequests from './pages/admin/Requests';
+import AdminRequests from './pages/admin/Requests';
 import MyTeam from './pages/admin/MyTeam';
+import MyShifts from './pages/MyShifts';
 
 function PrivateRoute({ children, roles }) {
     const { user, loading } = useAuth();
@@ -39,7 +41,7 @@ function App() {
                         <Route path="dashboard" element={<Dashboard />} />
                         <Route path="breaks" element={<Breaks />} />
                         <Route path="reports" element={<Reports />} />
-                        <Route path="shifts" element={<Shifts />} />
+                        <Route path="my-shifts" element={<MyShifts />} />
                         <Route path="pioneers-ai" element={<PioneersAI />} />
                         <Route path="settings" element={<Settings />} />
                         <Route path="notes" element={<Notes />} />

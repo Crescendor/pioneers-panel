@@ -16,6 +16,10 @@ export default function AdminShifts() {
     const [loading, setLoading] = useState(false);
     const [draggedTemplate, setDraggedTemplate] = useState(null);
 
+    // User Schedule Modal
+    const [selectedAgent, setSelectedAgent] = useState(null);
+    const [agentDateRange, setAgentDateRange] = useState({ start: '', end: '', status: 'Raporlu' });
+
     const shiftTemplates = [
         { label: 'Sabah', start: '11:00', end: '20:00', color: '#6366f1' },
         { label: 'Akşam', start: '13:00', end: '22:00', color: '#8b5cf6' },
@@ -117,7 +121,35 @@ export default function AdminShifts() {
         if (!timeStr) return 0;
         const [h, m] = timeStr.split(':').map(Number);
         const totalMinutes = (h - 11) * 60 + m;
-        return (totalMinutes / (11 * 60)) * 100;
+        // Total range is 11:00 to 22:00 = 11 hours = 660 minutes.
+        return (totalMinutes / 660) * 100;
+    };
+
+    const handleAgentBulkAction = async () => {
+        if (!agentDateRange.start || !agentDateRange.end) return alert('Tarih aralığı seçin');
+
+        const start = new Date(agentDateRange.start);
+        const end = new Date(agentDateRange.end);
+        const shiftsToCreate = [];
+
+        // Loop through dates
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            shiftsToCreate.push({
+                user_id: selectedAgent.id,
+                shift_date: d.toISOString().split('T')[0],
+                start_time: '00:00', // System handles this as special status if needed, or 00:00 for off
+                end_time: '00:00',
+                special_status: agentDateRange.status
+            });
+        }
+
+        try {
+            await api.post('/shifts/bulk', { shifts: shiftsToCreate });
+            setSelectedAgent(null);
+            loadData();
+        } catch (err) {
+            alert('İşlem başarısız');
+        }
     };
 
     return (
@@ -184,7 +216,13 @@ export default function AdminShifts() {
                                     <div className="agent-mini-info">
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                             <div>
-                                                <div className="name">{u.full_name}</div>
+                                                <div
+                                                    className="name"
+                                                    style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                                                    onClick={() => setSelectedAgent(u)}
+                                                >
+                                                    {u.full_name}
+                                                </div>
                                                 <div className="id">NOT_IZM_{u.agent_number}</div>
                                             </div>
                                             <button
@@ -259,6 +297,71 @@ export default function AdminShifts() {
                                 setEditingShift(null);
                                 loadData();
                             }}>Kaydet</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {selectedAgent && (
+                <div className="modal-overlay" onClick={() => setSelectedAgent(null)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">{selectedAgent.full_name} - Toplu İşlem</h3>
+                            <button className="modal-close" onClick={() => setSelectedAgent(null)}>×</button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">Başlangıç Tarihi</label>
+                                <input type="date" className="form-input" value={agentDateRange.start} onChange={e => setAgentDateRange({ ...agentDateRange, start: e.target.value })} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Bitiş Tarihi</label>
+                                <input type="date" className="form-input" value={agentDateRange.end} onChange={e => setAgentDateRange({ ...agentDateRange, end: e.target.value })} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Durum</label>
+                                <select className="form-select" value={agentDateRange.status} onChange={e => setAgentDateRange({ ...agentDateRange, status: e.target.value })}>
+                                    <option value="Raporlu">Raporlu</option>
+                                    <option value="İzinli">İzinli</option>
+                                    <option value="Eğitim">Eğitim</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setSelectedAgent(null)}>İptal</button>
+                            <button className="btn btn-primary" onClick={handleAgentBulkAction}>Uygula</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {selectedAgent && (
+                <div className="modal-overlay" onClick={() => setSelectedAgent(null)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3 className="modal-title">{selectedAgent.full_name} - Toplu İşlem</h3>
+                            <button className="modal-close" onClick={() => setSelectedAgent(null)}>×</button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-group">
+                                <label className="form-label">Başlangıç Tarihi</label>
+                                <input type="date" className="form-input" value={agentDateRange.start} onChange={e => setAgentDateRange({ ...agentDateRange, start: e.target.value })} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Bitiş Tarihi</label>
+                                <input type="date" className="form-input" value={agentDateRange.end} onChange={e => setAgentDateRange({ ...agentDateRange, end: e.target.value })} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Durum</label>
+                                <select className="form-select" value={agentDateRange.status} onChange={e => setAgentDateRange({ ...agentDateRange, status: e.target.value })}>
+                                    <option value="Raporlu">Raporlu</option>
+                                    <option value="İzinli">İzinli</option>
+                                    <option value="Eğitim">Eğitim</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setSelectedAgent(null)}>İptal</button>
+                            <button className="btn btn-primary" onClick={handleAgentBulkAction}>Uygula</button>
                         </div>
                     </div>
                 </div>

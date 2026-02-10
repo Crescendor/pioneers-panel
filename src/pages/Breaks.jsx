@@ -87,27 +87,39 @@ export default function Breaks() {
                             </select>
                         </div>
                         <div className="form-group">
-                            <label className="form-label">Süre: {selectedDuration} dk</label>
-                            <input
-                                type="range"
-                                min="10"
-                                max="60"
-                                step="10"
-                                value={selectedDuration}
-                                onChange={e => setSelectedDuration(parseInt(e.target.value))}
-                                className="form-range"
-                                style={{ width: '100%', accentColor: 'var(--primary)' }}
-                            />
+                            <label className="form-label">Süre Seçimi</label>
+                            <div style={{ display: 'flex', gap: 12 }}>
+                                <button
+                                    className={`btn ${selectedDuration === 10 ? 'btn-primary' : 'btn-secondary'}`}
+                                    onClick={() => setSelectedDuration(10)}
+                                    disabled={summary && summary.remaining10 <= 0}
+                                    style={{ flex: 1 }}
+                                >
+                                    10 dk
+                                </button>
+                                <button
+                                    className={`btn ${selectedDuration === 30 ? 'btn-primary' : 'btn-secondary'}`}
+                                    onClick={() => setSelectedDuration(30)}
+                                    disabled={summary && summary.remaining30 <= 0}
+                                    style={{ flex: 1 }}
+                                >
+                                    30 dk
+                                </button>
+                            </div>
                         </div>
-                        <button className="btn btn-success" onClick={scheduleBreak}>Mola Planla</button>
+                        <button className="btn btn-success" onClick={scheduleBreak} disabled={!selectedTime}>Mola Planla</button>
                     </div>
                     {summary && (
                         <div style={{ marginTop: 20, padding: 16, background: 'var(--bg-dark)', borderRadius: 'var(--radius-sm)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                <span>Toplam Kullanılan:</span><span>{summary.usedMinutes} dk</span>
+                                <span>Toplam Kullanılan:</span><span>{summary.usedMinutes}/60 dk</span>
                             </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: summary.remainingMinutes < 10 ? 'var(--danger)' : 'var(--success)' }}>
-                                <span>Kalan Hak:</span><span>{summary.remainingMinutes} dk</span>
+                            <div className="progress-bar" style={{ height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
+                                <div style={{ width: `${(summary.usedMinutes / 60) * 100}%`, height: '100%', background: 'var(--success)' }}></div>
+                            </div>
+                            <div style={{ display: 'flex', gap: 12, marginTop: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+                                <span>10dk Hak: {summary.remaining10 || 6}</span>
+                                <span>30dk Hak: {summary.remaining30 || 1}</span>
                             </div>
                         </div>
                     )}

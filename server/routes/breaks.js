@@ -52,15 +52,20 @@ router.post('/', authenticateToken, (req, res) => {
         const { start_time, duration_minutes } = req.body;
         const today = new Date().toISOString().split('T')[0];
 
-        // Check daily limits (max 60m)
+        // Check daily limits
         const existing = db.prepare(`
       SELECT duration_minutes FROM breaks WHERE user_id = ? AND break_date = ? AND status != 'cancelled'
     `).all(req.user.id, today);
 
         const usedMinutes = existing.reduce((sum, b) => sum + b.duration_minutes, 0);
+        const used30 = existing.filter(b => b.duration_minutes === 30).length;
 
         if (usedMinutes + duration_minutes > 60) {
             return res.status(400).json({ error: `Günlük mola limitiniz (60 dk) aşılamaz. Kalan: ${60 - usedMinutes} dk` });
+        }
+
+        if (duration_minutes === 30) {
+            if (used30 >= 1) return res.status(400).json({ error: 'Günlük en fazla 1 adet 30 dakikalık mola kullanabilirsiniz.' });
         }
 
         // Conflict check: Team concurrent limit (e.g., 2 people)
