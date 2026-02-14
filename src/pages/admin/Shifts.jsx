@@ -9,6 +9,7 @@ export default function AdminShifts() {
     const { user } = useAuth();
     const [teams, setTeams] = useState([]);
     const [users, setUsers] = useState([]);
+    const [breaks, setBreaks] = useState([]);
     const [shifts, setShifts] = useState([]); // Displayed shifts
     const [allShifts, setAllShifts] = useState([]); // All fetched shifts
     const [selectedTeam, setSelectedTeam] = useState('');
@@ -58,14 +59,16 @@ export default function AdminShifts() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [usersRes, shiftsRes] = await Promise.all([
+            const [usersRes, shiftsRes, breaksRes] = await Promise.all([
                 api.get(`/users/team/${selectedTeam}`),
-                api.get(`/shifts/team/${selectedTeam}`)
+                api.get(`/shifts/team/${selectedTeam}`),
+                api.get(`/breaks/team/${selectedTeam}/date/${selectedDate}`)
             ]);
             setUsers(usersRes.data);
             setAllShifts(shiftsRes.data);
             // Filter shifts for the selected date
             setShifts(shiftsRes.data.filter(s => s.shift_date === selectedDate));
+            setBreaks(breaksRes.data.breaks);
         } catch (err) {
             console.error(err);
         } finally {
@@ -184,6 +187,10 @@ export default function AdminShifts() {
         const totalMinutes = (h - 11) * 60 + m;
         // Total range is 11:00 to 22:00 = 11 hours = 660 minutes.
         return (totalMinutes / 660) * 100;
+    };
+
+    const getTimelineWidth = (duration) => {
+        return (duration / 660) * 100;
     };
 
     const handleAgentBulkAction = async () => {
@@ -378,6 +385,32 @@ export default function AdminShifts() {
                                             title={`${shift.start_time} - ${shift.end_time} (${shift.special_status || 'Mesai'})`}
                                         >
                                             <span className="time-text">{shift.special_status || `${shift.start_time} - ${shift.end_time}`}</span>
+                                        </div>
+                                    ))}
+
+                                    {/* Breaks Overlay */}
+                                    {breaks.filter(b => b.user_id === u.id).map(brk => (
+                                        <div
+                                            key={brk.id}
+                                            className="break-overlay"
+                                            style={{
+                                                left: `${getTimelinePos(brk.start_time)}%`,
+                                                width: `${getTimelineWidth(brk.duration_minutes)}%`,
+                                                position: 'absolute',
+                                                top: '10%', height: '80%',
+                                                background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.2), rgba(255,255,255,0.2) 5px, rgba(255,255,255,0.4) 5px, rgba(255,255,255,0.4) 10px)',
+                                                zIndex: 12,
+                                                borderRadius: 4,
+                                                pointerEvents: 'none',
+                                                border: '1px solid rgba(255,255,255,0.3)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                                            }}
+                                            title={`Mola: ${brk.start_time} (${brk.duration_minutes}dk)`}
+                                        >
+                                            {brk.duration_minutes >= 20 && <span style={{ fontSize: 12, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8))' }}>☕</span>}
                                         </div>
                                     ))}
                                 </div>

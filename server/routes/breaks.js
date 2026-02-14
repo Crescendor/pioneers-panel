@@ -46,6 +46,23 @@ router.get('/team/:teamId/today', authenticateToken, (req, res) => {
     }
 });
 
+// Get team breaks by date
+router.get('/team/:teamId/date/:date', authenticateToken, (req, res) => {
+    try {
+        const { teamId, date } = req.params;
+        const breaks = db.prepare(`
+      SELECT b.*, u.full_name, u.agent_number
+      FROM breaks b JOIN users u ON b.user_id = u.id
+      WHERE u.team_id = ? AND b.break_date = ? AND b.status != 'cancelled'
+      ORDER BY b.start_time
+    `).all(teamId, date);
+        res.json({ breaks });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Sunucu hatası' });
+    }
+});
+
 // Schedule a break
 router.post('/', authenticateToken, (req, res) => {
     try {
