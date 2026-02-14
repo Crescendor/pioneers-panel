@@ -33,81 +33,50 @@
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
-.shifts-grid {
-    padding: 0;
-    overflow: hidden;
-}
-
-.grid-header {
-    display: flex;
-    background: rgba(0, 0, 0, 0.2);
-    border-bottom: 1px solid var(--border);
-}
-
-.agent-col {
-    width: 250px;
-    padding: 12px 20px;
-    border-right: 1px solid var(--border);
-    font-weight: 600;
-}
-
-.timeline-axis {
-    flex: 1;
-    display: flex;
-}
-
-.hour-mark {
-    flex: 1;
-    font-size: 11px;
-    color: var(--text-muted);
-    width: 0;
-    text-align: center;
-    overflow: visible;
-    flex-shrink: 0;
-}
-
-/* Grid Body */
-.grid-body {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
+/* Grid Alignment Fix */
+.grid-header,
 .grid-row {
     display: flex;
-    align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    padding-bottom: 8px;
+    min-width: 800px;
+    /* Force minimum width to prevent squashing on mobile */
 }
 
-.grid-row:hover {
-    background: rgba(255, 255, 255, 0.02);
+.shifts-grid {
+    padding: 0;
+    overflow-x: auto;
+    /* Enable horizontal scroll on mobile */
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
 }
 
+.agent-col,
 .agent-cell {
-    width: 220px;
+    width: 250px;
+    /* Fixed equal width for header and body columns */
+    min-width: 250px;
     flex-shrink: 0;
-    border-right: 1px solid var(--border-color);
-    padding-right: 12px;
+    padding: 12px 20px;
+    border-right: 1px solid var(--border);
+    background: var(--card-bg);
+    /* Keep sticky if needed later */
+    z-index: 5;
 }
 
-.agent-mini-info .name {
-    font-size: 14px;
-    font-weight: 500;
-}
-
-.agent-mini-info .id {
-    font-size: 11px;
-    color: var(--text-muted);
+.timeline-axis,
+.timeline-cell {
+    flex: 1;
+    display: flex;
+    position: relative;
+    min-width: 600px;
+    /* Ensure timeline has space */
 }
 
 .timeline-cell {
-    flex-grow: 1;
-    height: 40px;
+    height: 50px;
+    /* Slightly taller for better touch target */
     background-color: rgba(255, 255, 255, 0.02);
-    border-radius: var(--radius-sm);
-    position: relative;
-    margin-left: 12px;
+    margin: 0;
+    /* Remove margin to align perfectly with header */
 }
 
 .timeline-cell::after {
