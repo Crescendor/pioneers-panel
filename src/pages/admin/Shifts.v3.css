@@ -1,45 +1,63 @@
-/* --- 48-Grid System Fixes --- */
+/* --- 48-Grid System Fixes (V3) --- */
 
-/* Main Container to handle overflow */
+:root {
+    --col-user: 250px;
+    --col-time: 1fr;
+    --col-act: 100px;
+    --total-fixed: 350px;
+    /* user + act */
+}
+
+/* Mobile Overrides */
+@media (max-width: 768px) {
+    :root {
+        --col-user: 140px;
+        --col-act: 60px;
+        --total-fixed: 200px;
+    }
+}
+
+/* Main Container */
 .grid-container {
     display: flex;
     flex-direction: column;
     width: 100%;
     overflow-x: auto;
-    /* Allow horizontal scroll if needed on small screens */
     position: relative;
-    /* For the red line */
     background: #0f172a;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
+    isolation: isolate;
 }
 
-/* Common Grid Layout for Header and Rows */
-/* We use a strict grid definition for columns */
-/* 250px for Name, 1fr for timeline (min 1200px), 100px for Actions */
-.grid-layout-shared {
-    display: grid;
-    grid-template-columns: 250px minmax(1200px, 1fr) 100px;
-    align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+/* Scroll Content Wrapper */
+.grid-scroll-content {
+    min-width: 1550px;
+    /* Default Desktop Min Width */
+    position: relative;
+    height: 100%;
+    /* Pass time-percent from JS to here */
+}
+
+@media (max-width: 768px) {
+    .grid-scroll-content {
+        min-width: 900px;
+        /* Adjusted Mobile Min Width */
+    }
 }
 
 /* Header Row */
 .grid-header-row {
     display: grid;
-    /* Strict Grid */
-    grid-template-columns: 250px minmax(1200px, 1fr) 100px;
-    background: rgba(30, 41, 59, 0.95);
-    backdrop-filter: blur(10px);
+    grid-template-columns: var(--col-user) var(--col-time) var(--col-act);
+    background: rgba(30, 41, 59, 1);
     position: sticky;
     top: 0;
     z-index: 50;
-    /* Above rows */
     font-size: 0.75rem;
     color: #94a3b8;
     height: 40px;
     align-items: center;
-    /* Vertically center */
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -48,27 +66,24 @@
     font-weight: 600;
 }
 
-/* The actual 48-slot timeline track */
-.timeline-track,
-.timeline-wrapper {
+/* Timeline Track */
+.timeline-unique-wrapper {
     display: grid;
     grid-template-columns: repeat(48, 1fr);
     width: 100%;
     height: 100%;
     position: relative;
-    /* For markers */
 }
 
-/* User Row Wrapper */
+/* Row Wrapper */
 .grid-row-wrapper {
     width: 100%;
 }
 
-/* ShiftGrid Inner Layout */
+/* Row Grid */
 .grid-user-row {
     display: grid;
-    /* Match header */
-    grid-template-columns: 250px minmax(1200px, 1fr) 100px;
+    grid-template-columns: var(--col-user) var(--col-time) var(--col-act);
     height: 50px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
     transition: background 0.2s;
@@ -78,40 +93,33 @@
     background: rgba(255, 255, 255, 0.02);
 }
 
-/* Cells Container inside ShiftGrid */
+/* Cells */
 .grid-cells-container {
     display: grid;
-    /* Match .timeline-track */
     grid-template-columns: repeat(48, 1fr);
     width: 100%;
     height: 100%;
     border-left: 1px solid rgba(255, 255, 255, 0.05);
     border-right: 1px solid rgba(255, 255, 255, 0.05);
     position: relative;
-    /* To contain break overlays */
 }
 
-/* Individual Cell */
 .grid-cell {
     border-right: 1px solid rgba(255, 255, 255, 0.03);
     height: 100%;
     cursor: crosshair;
-    /* Indicate paintable */
     transition: background 0.1s;
     position: relative;
     user-select: none;
-    /* Prevent text selection while dragging */
 }
 
 .grid-cell:nth-child(2n) {
-    /* Every hour line slightly lighter? */
     border-right: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* Hour markers in Header */
+/* Hour Markers */
 .hour-marker {
     grid-column: span 2;
-    /* Each hour is 2 slots */
     text-align: left;
     padding-left: 4px;
     border-left: 1px solid rgba(255, 255, 255, 0.1);
@@ -121,7 +129,11 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* Current Time Line (Red Line) */
+/* 
+   RED LINE IMPLEMENTATION 
+   Positioned absolute relative to .grid-scroll-content.
+   Left = UserColWidth + ( (TotalWidth - FixedCols) * Percent / 100 )
+*/
 .current-time-line {
     position: absolute;
     top: 0;
@@ -129,10 +141,12 @@
     width: 2px;
     background: #ef4444;
     box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
-    z-index: 100;
+    z-index: 40;
     pointer-events: none;
     transition: left 60s linear;
-    /* Smooth update every minute */
+
+    /* The Magic Calculation */
+    left: calc(var(--col-user) + ((100% - var(--total-fixed)) * var(--time-percent) / 100));
 }
 
 .current-time-line::after {
@@ -145,32 +159,10 @@
     background: #ef4444;
     border-radius: 50%;
     box-shadow: 0 0 5px rgba(239, 68, 68, 0.8);
+    z-index: 55;
 }
 
-/* Smart Label (Centered over blocks) */
-.shift-block-label {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: white;
-    font-size: 0.75rem;
-    font-weight: 600;
-    white-space: nowrap;
-    pointer-events: none;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-    z-index: 10;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 2px 6px;
-    border-radius: 4px;
-}
-
-/* Hide text in individual cells if we use smart labels */
-.grid-cell .cell-label {
-    display: none;
-}
-
-/* User Info Styling */
+/* User Info */
 .user-info {
     padding: 0 16px;
     display: flex;
@@ -178,6 +170,10 @@
     justify-content: center;
     border-right: 1px solid rgba(255, 255, 255, 0.05);
     overflow: hidden;
+    position: sticky;
+    left: 0;
+    background: #0f172a;
+    z-index: 30;
 }
 
 .user-info .name {
@@ -207,29 +203,42 @@
     border-radius: 4px;
     pointer-events: none;
     z-index: 20;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 0.65rem;
-    text-shadow: 0 1px 2px black;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
-/* Mobile Adjustments */
-@media (max-width: 768px) {
+/* Smart Label */
+.shift-block-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    z-index: 10;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
 
-    .grid-header-row,
-    .grid-user-row {
-        /* Allow it to be wide and scrollable */
-        min-width: 800px;
+/* Mobile Tweaks */
+@media (max-width: 768px) {
+    .user-info {
+        padding: 0 8px;
     }
 
-    .user-info {
-        position: sticky;
-        left: 0;
-        background: #0f172a;
-        z-index: 20;
-        border-right: 1px solid rgba(255, 255, 255, 0.2);
+    .user-info .code {
+        display: none;
+    }
+
+    .row-actions {
+        flex-direction: column;
+        gap: 2px !important;
+    }
+
+    .row-actions button {
+        transform: scale(0.8);
     }
 }

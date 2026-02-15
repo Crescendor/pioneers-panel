@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
-import './Shifts.css';
+import './Shifts.v3.css'; // V3 CSS
 import ShiftGrid from '../../components/ShiftGrid';
 import UserMonthlyGrid from '../../components/UserMonthlyGrid';
 
@@ -47,22 +47,43 @@ export default function AdminShifts() {
     const [breaks, setBreaks] = useState([]);
 
     // UI State
-    const [activeTool, setActiveTool] = useState(SHIFT_TEMPLATES[0]); // Default tool
+    const [activeTool, setActiveTool] = useState(SHIFT_TEMPLATES[0]);
     const [customStatus, setCustomStatus] = useState({ label: 'Özel', color: '#ec4899' });
     const [copiedGrid, setCopiedGrid] = useState(null);
-    const [hoveredCell, setHoveredCell] = useState(null); // { userId, index }
+    const [hoveredCell, setHoveredCell] = useState(null);
+    const [currentTimePercent, setCurrentTimePercent] = useState(0);
 
-    // User Detail View (Monthly/Weekly)
     const [detailUser, setDetailUser] = useState(null);
 
-    useEffect(() => { loadTeams(); }, []);
+    useEffect(() => {
+        loadTeams();
+
+        // Timer for Red Line
+        const updateTime = () => {
+            const now = new Date();
+            const totalMins = now.getHours() * 60 + now.getMinutes();
+            const percent = (totalMins / (24 * 60)) * 100;
+            setCurrentTimePercent(percent);
+        };
+        updateTime();
+        const interval = setInterval(updateTime, 60000);
+        return () => clearInterval(interval);
+    }, []);
+
     useEffect(() => { if (selectedTeam) loadData(); }, [selectedTeam, selectedDate]);
 
     // --- DATA LOADING ---
     const loadTeams = async () => {
-        const res = await api.get('/teams');
-        setTeams(res.data);
-        if (user?.role === 'TeamLead') setSelectedTeam(user.team_id);
+        try {
+            const res = await api.get('/teams');
+            if (user?.role === 'TeamLead' && user.team_id) {
+                const myTeam = res.data.filter(t => t.id == user.team_id);
+                setTeams(myTeam);
+                setSelectedTeam(user.team_id);
+            } else {
+                setTeams(res.data);
+            }
+        } catch (err) { console.error(err); }
     };
 
     const loadData = async () => {
@@ -76,13 +97,11 @@ export default function AdminShifts() {
             setUsers(usersRes.data);
             setBreaks(breaksRes.data.breaks);
 
-            // Initialize Grid State
             const newGridState = {};
             usersRes.data.forEach(u => {
                 newGridState[u.id] = Array(GRID_SIZE).fill(null);
             });
 
-            // Populate Grid with Shifts
             const daysShifts = shiftsRes.data.filter(s => s.shift_date === selectedDate);
             daysShifts.forEach(s => {
                 const startIndex = timeToGridIndex(s.start_time);
@@ -112,40 +131,26 @@ export default function AdminShifts() {
         if (!status || status === 'Mesai') return '#3b82f6';
         if (status === 'İzin') return '#ef4444';
         if (status === 'Raporlu') return '#f59e0b';
-        // Check custom tools logic or return default
         return '#6366f1';
     };
 
     // --- INTERACTION LOGIC ---
-
-    // Paint a single cell or range
     const paintGrid = (userId, startIndex, endIndex = startIndex + 1) => {
         setGridState(prev => {
             const newRow = [...prev[userId]];
-
             for (let i = startIndex; i < endIndex; i++) {
                 if (i >= GRID_SIZE) continue;
 
                 if (activeTool.type === 'eraser') {
                     newRow[i] = null;
                 } else if (activeTool.type === 'template') {
-                    newRow[i] = {
-                        status: 'Mesai',
-                        color: activeTool.color
-                    };
+                    newRow[i] = { status: 'Mesai', color: activeTool.color };
                 } else if (activeTool.type === 'status') {
-                    newRow[i] = {
-                        status: activeTool.value,
-                        color: activeTool.color
-                    };
+                    newRow[i] = { status: activeTool.value, color: activeTool.color };
                 } else if (activeTool.type === 'custom') {
-                    newRow[i] = {
-                        status: customStatus.label,
-                        color: customStatus.color
-                    };
+                    newRow[i] = { status: customStatus.label, color: customStatus.color };
                 }
             }
-
             return { ...prev, [userId]: newRow };
         });
     };
@@ -160,6 +165,10 @@ export default function AdminShifts() {
         }
     };
 
+    const handleRangeSelect = (userId, start, end) => {
+        paintGrid(userId, start, end);
+    };
+
     const handleRowClick = (userId) => {
         const user = users.find(u => u.id === userId);
         setDetailUser(user);
@@ -167,48 +176,27 @@ export default function AdminShifts() {
 
     // --- SAVING ---
     const saveChanges = async () => {
-        // Convert grid back to shifts
         const shiftsToSave = [];
-
         Object.entries(gridState).forEach(([userId, grid]) => {
             let currentBlock = null;
-
             grid.forEach((cell, index) => {
                 const time = indexToTimeStr(index);
-
                 if (cell) {
                     if (!currentBlock) {
-                        // Start new block
-                        currentBlock = {
-                            user_id: parseInt(userId),
-                            start_index: index,
-                            start_time: time,
-                            status: cell.status,
-                            color: cell.color
-                        };
+                        currentBlock = { user_id: parseInt(userId), start_index: index, start_time: time, status: cell.status, color: cell.color };
                     } else if (cell.status !== currentBlock.status) {
-                        // End current, start new
                         currentBlock.end_time = time;
                         shiftsToSave.push(currentBlock);
-
-                        currentBlock = {
-                            user_id: parseInt(userId),
-                            start_index: index,
-                            start_time: time,
-                            status: cell.status,
-                            color: cell.color
-                        };
+                        currentBlock = { user_id: parseInt(userId), start_index: index, start_time: time, status: cell.status, color: cell.color };
                     }
                 } else {
                     if (currentBlock) {
-                        // End block
                         currentBlock.end_time = time;
                         shiftsToSave.push(currentBlock);
                         currentBlock = null;
                     }
                 }
             });
-
             if (currentBlock) {
                 currentBlock.end_time = '24:00';
                 shiftsToSave.push(currentBlock);
@@ -217,7 +205,6 @@ export default function AdminShifts() {
 
         try {
             await api.delete(`/shifts/team/${selectedTeam}/date/${selectedDate}`);
-
             const apiShifts = shiftsToSave.map(s => ({
                 user_id: s.user_id,
                 shift_date: selectedDate,
@@ -225,7 +212,6 @@ export default function AdminShifts() {
                 end_time: s.end_time,
                 special_status: s.status
             }));
-
             if (apiShifts.length > 0) {
                 await api.post('/shifts/bulk', { shifts: apiShifts });
             }
@@ -239,29 +225,36 @@ export default function AdminShifts() {
 
     const copyGrid = (userId) => {
         setCopiedGrid([...gridState[userId]]);
-        alert('Kopyalandı!');
     };
 
     const pasteGrid = (userId) => {
         if (!copiedGrid) return;
-        setGridState(prev => ({
-            ...prev,
-            [userId]: [...copiedGrid]
-        }));
+        setGridState(prev => ({ ...prev, [userId]: [...copiedGrid] }));
+    };
+
+    const pasteToAll = () => {
+        if (!copiedGrid) return;
+        if (!window.confirm('Kopyalanan vardiyayı ekrandaki TÜM kullanıcılara yapıştırmak istiyor musunuz?')) return;
+        setGridState(prev => {
+            const newState = { ...prev };
+            users.forEach(u => { newState[u.id] = [...copiedGrid]; });
+            return newState;
+        });
     };
 
     return (
-        <div className="page admin-shifts-reset">
+        <div className="page admin-shifts-reset" style={{ overflow: 'hidden' }}>
             <div className="reset-controls">
                 <div className="control-row">
-                    <h1 className="page-title">Vardiya Düzenleyici (Grid)</h1>
+                    <h1 className="page-title">Vardiya Düzenleyici</h1>
                     <div className="actions">
+                        {copiedGrid && <button className="btn btn-warning" onClick={pasteToAll}>📋 Tümüne Yapıştır</button>}
                         <button className="btn btn-primary" onClick={saveChanges}>💾 Kaydet</button>
                     </div>
                 </div>
 
                 <div className="control-row secondary">
-                    <select className="form-select" value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)}>
+                    <select className="form-select" value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)} disabled={user?.role === 'TeamLead'}>
                         <option value="">Takım Seç...</option>
                         {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
@@ -271,23 +264,13 @@ export default function AdminShifts() {
                 <div className="toolbar">
                     <span className="tool-label">Araçlar:</span>
                     {SHIFT_TEMPLATES.map(t => (
-                        <button
-                            key={t.label}
-                            className={`tool-btn ${activeTool === t ? 'active' : ''}`}
-                            style={{ '--color': t.color }}
-                            onClick={() => setActiveTool(t)}
-                        >
+                        <button key={t.label} className={`tool-btn ${activeTool === t ? 'active' : ''}`} style={{ '--color': t.color }} onClick={() => setActiveTool(t)}>
                             {t.label}
                         </button>
                     ))}
                     <div className="divider"></div>
                     {STATUS_TOOLS.map(t => (
-                        <button
-                            key={t.label}
-                            className={`tool-btn ${activeTool === t ? 'active' : ''}`}
-                            style={{ '--color': t.color }}
-                            onClick={() => setActiveTool(t)}
-                        >
+                        <button key={t.label} className={`tool-btn ${activeTool === t ? 'active' : ''}`} style={{ '--color': t.color }} onClick={() => setActiveTool(t)}>
                             {t.label}
                         </button>
                     ))}
@@ -295,11 +278,7 @@ export default function AdminShifts() {
                     <div className="custom-tool">
                         <input type="text" value={customStatus.label} onChange={e => setCustomStatus({ ...customStatus, label: e.target.value })} className="mini-input" />
                         <input type="color" value={customStatus.color} onChange={e => setCustomStatus({ ...customStatus, color: e.target.value })} className="mini-color" />
-                        <button
-                            className={`tool-btn ${activeTool.type === 'custom' ? 'active' : ''}`}
-                            style={{ '--color': customStatus.color }}
-                            onClick={() => setActiveTool({ type: 'custom', ...customStatus })}
-                        >
+                        <button className={`tool-btn ${activeTool.type === 'custom' ? 'active' : ''}`} style={{ '--color': customStatus.color }} onClick={() => setActiveTool({ type: 'custom', ...customStatus })}>
                             Seç
                         </button>
                     </div>
@@ -307,44 +286,50 @@ export default function AdminShifts() {
             </div>
 
             <div className="grid-container">
-                {/* Header Row */}
-                <div className="grid-header-row">
-                    <div className="header-cell agent-name">Agent</div>
-                    <div className="header-cell timeline-wrapper">
-                        {Array.from({ length: 24 }).map((_, h) => (
-                            <div key={h} className="hour-marker" style={{ width: `${(1 / 24) * 100}%` }}>
-                                {h}
-                            </div>
-                        ))}
-                    </div>
-                    <div className="header-cell actions">İşlem</div>
-                </div>
+                {/* 
+                    Wrapper that sets the CSS variable for time percent.
+                */}
+                <div
+                    className="grid-scroll-content"
+                    style={{ '--time-percent': currentTimePercent }}
+                >
+                    <div className="current-time-line" title="Şu An"></div>
 
-                {/* Users Rows */}
-                {users.map(user => (
-                    <div key={user.id} className="grid-row-wrapper">
-                        <ShiftGrid
-                            user={user}
-                            gridData={gridState[user.id]}
-                            breaks={breaks.filter(b => b.user_id === user.id)}
-                            onCellClick={handleCellClick}
-                            onCellHover={(uid, idx) => {
-                                if (uid && idx !== null) setHoveredCell({ userId: uid, index: idx });
-                                else setHoveredCell(null);
-                            }}
-                            onUserClick={handleRowClick}
-                            actions={
-                                <div style={{ display: 'flex', gap: '5px' }}>
-                                    <button className="btn-icon" onClick={(e) => { e.stopPropagation(); copyGrid(user.id); }} title="Kopyala">📋</button>
-                                    <button className="btn-icon" onClick={(e) => { e.stopPropagation(); pasteGrid(user.id); }} title="Yapıştır">📝</button>
-                                </div>
-                            }
-                        />
+                    <div className="grid-header-row">
+                        <div className="header-cell agent-name">Agent</div>
+                        <div className="header-cell timeline-wrapper">
+                            {Array.from({ length: 24 }).map((_, h) => (
+                                <div key={h} className="hour-marker" style={{ width: `${(1 / 24) * 100}%` }}>{h}</div>
+                            ))}
+                        </div>
+                        <div className="header-cell actions">İşlem</div>
                     </div>
-                ))}
+
+                    {users.map(user => (
+                        <div key={user.id} className="grid-row-wrapper">
+                            <ShiftGrid
+                                user={user}
+                                gridData={gridState[user.id]}
+                                breaks={breaks.filter(b => b.user_id === user.id)}
+                                onCellClick={handleCellClick}
+                                onRangeSelect={handleRangeSelect}
+                                onCellHover={(uid, idx) => {
+                                    if (uid && idx !== null) setHoveredCell({ userId: uid, index: idx });
+                                    else setHoveredCell(null);
+                                }}
+                                onUserClick={handleRowClick}
+                                actions={
+                                    <div style={{ display: 'flex', gap: '5px' }}>
+                                        <button className="btn-icon" onClick={(e) => { e.stopPropagation(); copyGrid(user.id); }} title="Kopyala">📋</button>
+                                        <button className="btn-icon" onClick={(e) => { e.stopPropagation(); pasteGrid(user.id); }} title="Yapıştır">📝</button>
+                                    </div>
+                                }
+                            />
+                        </div>
+                    ))}
+                </div>
             </div>
 
-            {/* User Detail Modal */}
             {detailUser && (
                 <div className="modal-overlay" onClick={() => setDetailUser(null)}>
                     <div className="modal" style={{ maxWidth: '95vw', width: '1200px', height: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
@@ -359,18 +344,9 @@ export default function AdminShifts() {
                 </div>
             )}
 
-            {/* Hover Tooltip Overlay */}
             {hoveredCell && (
                 <div className="floating-tooltip" style={{
-                    position: 'fixed',
-                    bottom: 20,
-                    right: 20,
-                    background: 'rgba(0,0,0,0.8)',
-                    color: 'white',
-                    padding: '8px 12px',
-                    borderRadius: 4,
-                    zIndex: 200, // Higher than modal
-                    pointerEvents: 'none'
+                    position: 'fixed', bottom: 20, right: 20, background: 'rgba(0,0,0,0.8)', color: 'white', padding: '8px 12px', borderRadius: 4, zIndex: 200, pointerEvents: 'none'
                 }}>
                     {indexToTimeStr(hoveredCell.index)} - {indexToTimeStr(hoveredCell.index + 1)}
                 </div>

@@ -1,77 +1,133 @@
-import React from 'react';
-import '../pages/admin/Shifts.css'; // Ensure CSS is loaded
+import { useState } from 'react';
+import './Shifts.css?v=2'; // Ensure new CSS is loaded
 
-// Helper Functions
-const indexToTimeStr = (index) => {
-    const totalMins = index * 30;
-    const h = Math.floor(totalMins / 60);
-    const m = totalMins % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-};
+export default function ShiftGrid({ user, gridData, breaks = [], onCellClick, onCellHover, actions, onUserClick, onRangeSelect }) {
+    const [dragStart, setDragStart] = useState(null);
 
-const renderBriefBreak = (userId, index, breaks) => {
-    const slotStartMins = index * 30;
-    const slotEndMins = (index + 1) * 30;
-
-    const userBreaks = breaks ? breaks.filter(b => b.user_id === userId) : [];
-
-    return userBreaks.map(b => {
-        const [bh, bm] = b.start_time.split(':').map(Number);
-        const breakStartMins = bh * 60 + bm;
-        const breakEndMins = breakStartMins + b.duration_minutes;
-
-        // Intersection check
-        const startLink = Math.max(slotStartMins, breakStartMins);
-        const endLink = Math.min(slotEndMins, breakEndMins);
-
-        if (startLink < endLink) {
-            const leftP = ((startLink - slotStartMins) / 30) * 100;
-            const widthP = ((endLink - startLink) / 30) * 100;
-
-            return (
-                <div key={b.id} className="grid-break-overlay" style={{
-                    left: `${leftP}%`,
-                    width: `${widthP}%`,
-                }} title={`Mola: ${b.start_time} (${b.duration_minutes}dk)`}></div>
-            );
-        }
-        return null;
-    });
-};
-
-export default function ShiftGrid({ user, gridData, breaks = [], onCellClick, onCellHover, actions, onUserClick }) {
     if (!gridData) return null;
+
+    // --- Interaction Handlers ---
+    const handleMouseDown = (index) => {
+        setDragStart(index);
+    };
+
+    const handleMouseEnter = (index) => {
+        // Optional: We could emit hover events here for drag preview
+        if (onCellHover) onCellHover(user.id, index);
+    };
+
+    const handleMouseUp = (index) => {
+        if (dragStart !== null) {
+            // Determine range (min to max) to allow backward drag
+            const start = Math.min(dragStart, index);
+            const end = Math.max(dragStart, index);
+
+            // If it's a single click (start === end), fallback to onCellClick
+            // If it's a drag (start !== end), use onRangeSelect
+            if (start === end && onCellClick) {
+                onCellClick(user.id, start);
+            } else if (onRangeSelect) {
+                onRangeSelect(user.id, start, end + 1); // +1 because logic usually expects exclusive end
+            }
+            setDragStart(null);
+        }
+    };
+
+    // Calculate Blocks for Smart Labels
+    const blocks = [];
+    let currentBlock = null;
+
+    gridData.forEach((cell, index) => {
+        if (cell) {
+            if (!currentBlock) {
+                // Start new block
+                currentBlock = { status: cell.status, color: cell.color, start: index, end: index };
+            } else if (cell.status === currentBlock.status && cell.color === currentBlock.color) {
+                // Continue block
+                currentBlock.end = index;
+            } else {
+                // End previous, start new
+                blocks.push(currentBlock);
+                currentBlock = { status: cell.status, color: cell.color, start: index, end: index };
+            }
+        } else {
+            if (currentBlock) {
+                blocks.push(currentBlock);
+                currentBlock = null;
+            }
+        }
+    });
+    if (currentBlock) blocks.push(currentBlock);
 
     return (
         <div className="grid-user-row">
             <div className="user-info" onClick={() => onUserClick && onUserClick(user.id)} style={{ cursor: onUserClick ? 'pointer' : 'default' }}>
-                <div className="name">{user.shift_date ? new Date(user.shift_date).toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' }) : user.full_name}</div>
+                <div className="name" title={user.full_name}>{user.shift_date ? new Date(user.shift_date).toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' }) : user.full_name}</div>
                 <div className="code">{user.shift_date ? 'Günlük Görünüm' : user.agent_number}</div>
             </div>
 
-            <div className="grid-slots">
-                {Array.from({ length: 48 }).map((_, index) => {
-                    const cellData = gridData[index];
+            <div className="grid-cells-container" onMouseLeave={() => setDragStart(null)}>
+                {/* Render Grid Cells */}
+                {Array.from({ length: 48 }).map((_, i) => {
+                    const cell = gridData[i];
                     return (
                         <div
-                            key={index}
-                            className="grid-slot"
+                            key={i}
+                            className="grid-cell"
                             style={{
-                                backgroundColor: cellData ? cellData.color : 'transparent',
-                                opacity: cellData ? 1 : 0.05
+                                background: cell ? cell.color : 'transparent',
+                                opacity: cell ? 0.9 : 0.5
                             }}
-                            onClick={() => onCellClick && onCellClick(user.id, index)}
-                            onMouseEnter={() => onCellHover && onCellHover(user.id, index)}
-                            onMouseLeave={() => onCellHover && onCellHover(null)}
-                            title={`${indexToTimeStr(index)} - ${indexToTimeStr(index + 1)}${cellData ? ` (${cellData.status})` : ''}`}
+                            onMouseDown={() => handleMouseDown(i)}
+                            onMouseEnter={() => handleMouseEnter(i)}
+                            onMouseUp={() => handleMouseUp(i)}
+                        />
+                    );
+                })}
+
+                {/* Render Smart Labels overlays */}
+                {blocks.map((block, idx) => {
+                    const left = (block.start / 48) * 100;
+                    const width = ((block.end - block.start + 1) / 48) * 100;
+                    return (
+                        <div
+                            key={idx}
+                            className="shift-block-label"
+                            style={{ left: `${left}%`, width: `${width}%` }}
                         >
-                            {renderBriefBreak(user.id, index, breaks)}
+                            {block.status}
+                        </div>
+                    );
+                })}
+
+                {/* Render Break Overlays */}
+                {breaks && breaks.map((b, i) => {
+                    // Convert break start time (HH:MM) to percentage
+                    if (!b.start_time) return null;
+                    const [h, m] = b.start_time.split(':').map(Number);
+                    const totalMins = h * 60 + m;
+                    const gridPos = totalMins / 30;
+                    const left = (gridPos / 48) * 100;
+
+                    // Duration is usually 30 min (1 slot) or 15
+                    let width = (1 / 48) * 100;
+                    if (b.duration) {
+                        width = (b.duration / (24 * 60)) * 100;
+                    }
+
+                    return (
+                        <div
+                            key={`break-${i}`}
+                            className="break-overlay"
+                            style={{ left: `${left}%`, width: `${width}%` }}
+                        >
+                            ☕
                         </div>
                     );
                 })}
             </div>
 
-            <div className="row-actions">
+            <div className="row-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 10px' }}>
                 {actions}
             </div>
         </div>
