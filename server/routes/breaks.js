@@ -5,6 +5,44 @@ import db from '../config/database.js';
 const router = express.Router();
 
 // Get my breaks today with summary
+// Get user breaks by date range
+router.get('/me/range', authenticateToken, (req, res) => {
+    try {
+        const { start, end } = req.query;
+        const breaks = db.prepare(`
+            SELECT * FROM breaks 
+            WHERE user_id = ? AND break_date BETWEEN ? AND ? AND status != 'cancelled'
+            ORDER BY break_date, start_time
+        `).all(req.user.id, start, end);
+        res.json({ breaks });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Sunucu hatası' });
+    }
+});
+
+// Get nonspecific user breaks by range (Admin)
+router.get('/user/:userId/range', authenticateToken, (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { start, end } = req.query;
+        // Check permissions
+        if (req.user.id != userId && req.user.role === 'Agent') {
+            return res.status(403).json({ error: 'Yetkisiz erişim' });
+        }
+
+        const breaks = db.prepare(`
+            SELECT * FROM breaks 
+            WHERE user_id = ? AND break_date BETWEEN ? AND ? AND status != 'cancelled'
+            ORDER BY break_date, start_time
+        `).all(userId, start, end);
+        res.json({ breaks });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Sunucu hatası' });
+    }
+});
+
 router.get('/me/today', authenticateToken, (req, res) => {
     try {
         const today = new Date().toISOString().split('T')[0];

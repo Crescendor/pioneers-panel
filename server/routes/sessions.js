@@ -38,7 +38,7 @@ router.post('/start', authenticateToken, (req, res) => {
         } else {
             db.prepare(`
         INSERT INTO work_sessions (user_id, session_date, start_time, status)
-        VALUES (?, ?, datetime('now', 'localtime'), 'active')
+        VALUES (?, ?, datetime('now'), 'active')
       `).run(req.user.id, today);
         }
 
@@ -82,7 +82,7 @@ router.post('/end', authenticateToken, (req, res) => {
     try {
         const today = new Date().toISOString().split('T')[0];
         db.prepare(`
-      UPDATE work_sessions SET status = 'completed', end_time = datetime('now', 'localtime') WHERE user_id = ? AND session_date = ?
+      UPDATE work_sessions SET status = 'completed', end_time = datetime('now') WHERE user_id = ? AND session_date = ?
     `).run(req.user.id, today);
         res.json({ message: 'Vardiya bitirildi' });
     } catch (err) {

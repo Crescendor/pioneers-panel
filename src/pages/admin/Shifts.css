@@ -1,252 +1,256 @@
-/* Premium Glass Shift System */
-.admin-shifts {
-    --glass-bg: rgba(30, 30, 40, 0.7);
-    --glass-border: 1px solid rgba(255, 255, 255, 0.08);
-    --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-    --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    --timeline-height: 70px;
+/* 48-Grid Shift System CSS */
+.admin-shifts-reset {
+    --grid-bg: #1e293b;
+    --grid-border: #334155;
+    --cell-width: 20px;
+    /* Base width, flex handles actual */
+    --hover-bg: rgba(255, 255, 255, 0.05);
 
-    /* Global Font Adjustments */
-    font-family: 'Inter', system-ui, sans-serif;
+    padding: 20px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
-/* Controls Section */
-.admin-shifts .shifts-controls {
-    background: var(--glass-bg);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: var(--glass-border);
-    box-shadow: var(--glass-shadow);
-    border-radius: 16px;
-    padding: 24px;
-    margin-bottom: 24px;
+/* Controls Header */
+.reset-controls {
+    background: var(--grid-bg);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.control-row {
     display: flex;
-    gap: 20px;
-    align-items: flex-end;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.secondary {
+    justify-content: flex-start;
+    gap: 15px;
+}
+
+/* Toolbar */
+.toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 1px solid var(--grid-border);
     flex-wrap: wrap;
 }
 
-.control-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.control-group label {
+.tool-label {
     font-size: 12px;
+    color: #94a3b8;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--text-secondary);
     font-weight: 600;
 }
 
-.templates-pool {
-    display: flex;
-    gap: 12px;
-    margin-left: auto;
-    padding-left: 20px;
-    border-left: var(--glass-border);
-}
-
-.shift-template {
-    padding: 8px 16px;
-    border-radius: 8px;
+.tool-btn {
+    padding: 6px 12px;
+    background: #0f172a;
+    border: 1px solid var(--grid-border);
+    border-radius: 4px;
     color: white;
-    cursor: grab;
     font-size: 12px;
-    font-weight: 600;
+    cursor: pointer;
     transition: all 0.2s;
-    user-select: none;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.shift-template:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
-}
-
-/* Grid Layout */
-.shifts-grid {
-    background: var(--glass-bg);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border: var(--glass-border);
-    box-shadow: var(--glass-shadow);
-    border-radius: 16px;
-    overflow: hidden;
-    padding: 0;
-}
-
-.grid-header {
-    background: rgba(255, 255, 255, 0.02);
-    border-bottom: var(--glass-border);
-    height: 50px;
     display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.tool-btn::before {
+    content: '';
+    display: block;
+    width: 10px;
+    height: 10px;
+    background: var(--color);
+    border-radius: 50%;
+}
+
+.tool-btn:hover {
+    background: var(--hover-bg);
+}
+
+.tool-btn.active {
+    border-color: var(--color);
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 8px var(--color);
+}
+
+.divider {
+    width: 1px;
+    height: 24px;
+    background: var(--grid-border);
+    margin: 0 10px;
+}
+
+.custom-tool {
+    display: flex;
+    gap: 5px;
     align-items: center;
 }
 
-.agent-col {
-    width: 250px;
-    min-width: 250px;
-    padding: 0 20px;
-    color: var(--text-secondary);
+.mini-input {
+    width: 80px;
+    background: #0f172a;
+    border: 1px solid var(--grid-border);
+    color: white;
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.mini-color {
+    width: 30px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    background: none;
+}
+
+/* Grid Container */
+.grid-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    background: #0f172a;
+    border: 1px solid var(--grid-border);
+    border-radius: 8px;
+    position: relative;
+}
+
+/* Common Row Styles */
+.grid-header-row,
+.grid-user-row {
+    display: grid;
+    /* 
+       Grid Columns: 
+       User Info (200px) | 
+       Timeline (48 * 1fr) | 
+       Actions (50px) 
+    */
+    grid-template-columns: 200px repeat(48, minmax(20px, 1fr)) 80px;
+    border-bottom: 1px solid var(--grid-border);
+    min-width: 1200px;
+    /* Ensure 48 columns don't squash too much */
+}
+
+/* Header */
+.grid-header-row {
+    background: var(--grid-bg);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    height: 40px;
+    align-items: center;
+}
+
+.header-cell {
+    padding: 0 10px;
     font-weight: 600;
-    font-size: 13px;
-    border-right: var(--glass-border);
-    height: 100%;
-    display: flex;
-    align-items: center;
+    font-size: 12px;
+    color: #94a3b8;
 }
 
-.timeline-axis {
-    flex: 1;
+.timeline-wrapper {
+    /* Spans 48 columns */
+    grid-column: 2 / span 48;
     display: flex;
-    justify-content: space-between;
-    padding: 0;
-    position: relative;
     height: 100%;
 }
 
-.hour-mark {
-    flex: 1;
-    display: flex;
-    align-items: center;
+.hour-marker {
+    border-left: 1px solid var(--grid-border);
     padding-left: 4px;
-    /* Offset text slightly */
-    font-size: 11px;
-    color: var(--text-muted);
-    border-left: 1px solid rgba(255, 255, 255, 0.05);
-    /* Tick mark */
+    font-size: 10px;
     height: 100%;
-}
-
-.grid-body {
-    /* No overflow hidden to allow tooltips if any */
-}
-
-.grid-row {
     display: flex;
-    border-bottom: var(--glass-border);
-    transition: background 0.2s;
+    align-items: center;
+    color: #64748b;
 }
 
-.grid-row:hover {
+/* User Row */
+.grid-user-row:hover {
     background: rgba(255, 255, 255, 0.02);
 }
 
-.agent-cell {
-    width: 250px;
-    min-width: 250px;
-    padding: 12px 20px;
-    border-right: var(--glass-border);
-    display: flex;
-    align-items: center;
+.user-info {
+    padding: 10px;
+    border-right: 1px solid var(--grid-border);
+    cursor: pointer;
 }
 
-/* Timeline Rendering */
-.timeline-cell {
-    flex: 1;
+.user-info .name {
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.user-info .code {
+    font-size: 11px;
+    color: #64748b;
+}
+
+.grid-slots {
+    /* Subgrid basically, but simple iteration works */
+    display: contents;
+}
+
+.grid-slot {
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    /* very subtle */
+    min-height: 50px;
+    cursor: pointer;
+    transition: all 0.1s;
     position: relative;
-    height: var(--timeline-height);
-    /* High-tech Grid Background */
-    background:
-        /* 1-hour lines (bold) */
-        repeating-linear-gradient(90deg,
-            rgba(255, 255, 255, 0.06) 0px,
-            rgba(255, 255, 255, 0.06) 1px,
-            transparent 1px,
-            transparent calc(100% / 11)),
-        /* 10-minute lines (subtle) */
-        repeating-linear-gradient(90deg,
-            rgba(255, 255, 255, 0.02) 0px,
-            rgba(255, 255, 255, 0.02) 1px,
-            transparent 1px,
-            transparent calc(100% / 66)
-            /* 11 hours * 6 segments */
-        );
+    /* Every 2 slots = 1 hour line */
 }
 
-/* Shift Bars */
-.shift-bar {
-    position: absolute;
-    top: 12px;
-    bottom: 12px;
-    height: auto;
-    border-radius: 6px;
-    background: var(--accent-gradient);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+/* Add solid line every 2 slots (Hour markers) */
+.grid-slot:nth-child(even) {
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.grid-slot:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Row Actions */
+.row-actions {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
-    font-size: 12px;
-    font-weight: 500;
+    gap: 5px;
+    border-left: 1px solid var(--grid-border);
+    padding: 0 5px;
+}
+
+.btn-icon {
+    background: none;
+    border: none;
     cursor: pointer;
-    z-index: 5;
-    transition: transform 0.2s, box-shadow 0.2s;
-    overflow: hidden;
-    white-space: nowrap;
-}
-
-.shift-bar:hover {
-    transform: translateY(-2px) scale(1.01);
-    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
-    z-index: 20;
-}
-
-/* Break Overlay Base Styles */
-.break-overlay {
-    backdrop-filter: blur(2px);
+    font-size: 16px;
+    opacity: 0.6;
     transition: opacity 0.2s;
 }
 
-.break-overlay:hover {
-    opacity: 0.9;
+.btn-icon:hover {
+    opacity: 1;
 }
 
-/* Mobile Responsive - Stacked Layout */
-@media (max-width: 768px) {
-    .admin-shifts .shifts-controls {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .templates-pool {
-        margin-left: 0;
-        margin-top: 10px;
-        padding-left: 0;
-        border-left: none;
-        overflow-x: auto;
-        padding-bottom: 5px;
-    }
-
-    .grid-header {
-        display: none;
-    }
-
-    .grid-row {
-        flex-direction: column;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        margin-bottom: 12px;
-        background: rgba(255, 255, 255, 0.01);
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    .agent-cell {
-        width: 100%;
-        min-width: 100%;
-        border-right: none;
-        border-bottom: var(--glass-border);
-        background: rgba(255, 255, 255, 0.03);
-        padding: 10px 16px;
-    }
-
-    .timeline-cell {
-        width: 100%;
-        height: 60px;
-        /* Compact mobile height */
-    }
+/* Break Overlay */
+.grid-break-overlay {
+    position: absolute;
+    top: 5px;
+    bottom: 5px;
+    background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.3) 2px, rgba(255, 255, 255, 0.5) 2px, rgba(255, 255, 255, 0.5) 4px);
+    z-index: 5;
+    pointer-events: none;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
 }

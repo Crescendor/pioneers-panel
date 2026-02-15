@@ -23,7 +23,9 @@ export default function Dashboard() {
         let interval;
         if (session?.status && session.status !== 'idle' && session.status !== 'completed') {
             const calculateTime = () => {
-                const start = new Date(session.start_time).getTime();
+                // Fix: Append 'Z' to treat database time as UTC, preventing 3-hour timezone offset
+                const timeStr = session.start_time.endsWith('Z') ? session.start_time : session.start_time + 'Z';
+                const start = new Date(timeStr).getTime();
                 const now = Date.now();
                 setTimer(Math.floor((now - start) / 1000));
             };

@@ -1,55 +1,64 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../utils/api';
 import './Shifts.css';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import ShiftGrid from '../../components/ShiftGrid';
+import UserMonthlyGrid from '../../components/UserMonthlyGrid';
+
+// --- CONSTANTS & HELPERS ---
+const GRID_SIZE = 48; // 24 hours * 2 (30 min slots)
+
+const timeToGridIndex = (timeStr) => {
+    if (!timeStr) return -1;
+    const [h, m] = timeStr.split(':').map(Number);
+    return Math.floor((h * 60 + m) / 30);
+};
+
+const indexToTimeStr = (index) => {
+    const totalMins = index * 30;
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
+const SHIFT_TEMPLATES = [
+    { label: '11-20', label_short: 'A', start: '11:00', end: '20:00', color: '#3b82f6', type: 'template' },
+    { label: '13-22', label_short: 'B', start: '13:00', end: '22:00', color: '#8b5cf6', type: 'template' },
+    { label: '09-18', label_short: 'C', start: '09:00', end: '18:00', color: '#10b981', type: 'template' }
+];
+
+const STATUS_TOOLS = [
+    { label: 'İzin', value: 'İzin', color: '#ef4444', type: 'status' },
+    { label: 'Rapor', value: 'Raporlu', color: '#f59e0b', type: 'status' },
+    { label: 'Sil', value: null, color: '#334155', type: 'eraser' }
+];
 
 export default function AdminShifts() {
     const { user } = useAuth();
+
+    // --- STATE ---
     const [teams, setTeams] = useState([]);
     const [users, setUsers] = useState([]);
-    const [breaks, setBreaks] = useState([]);
-    const [shifts, setShifts] = useState([]); // Displayed shifts
-    const [allShifts, setAllShifts] = useState([]); // All fetched shifts
     const [selectedTeam, setSelectedTeam] = useState('');
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-    const [editingShift, setEditingShift] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [draggedTemplate, setDraggedTemplate] = useState(null);
-    const [currentTime, setCurrentTime] = useState(new Date());
 
-    // User Schedule Modal (Advanced)
-    const [selectedAgents, setSelectedAgents] = useState([]); // Array of user IDs
-    const [showFlexibleModal, setShowFlexibleModal] = useState(false); // Kept for bulk actions
-    const [advancedModalOpen, setAdvancedModalOpen] = useState(false);
-    const [editingUser, setEditingUser] = useState(null);
-    const [flexibleShift, setFlexibleShift] = useState({
-        start: '12:00',
-        end: '13:00',
-        label: '',
-        color: '#22c55e',
-        status: ''
-    });
+    // Grid State: { [userId]: Array(48).fill(null | { status, color, id? }) }
+    const [gridState, setGridState] = useState({});
+    const [breaks, setBreaks] = useState([]);
 
-    // Report Modal
-    const [showReportModal, setShowReportModal] = useState(false);
-    const [reportConfig, setReportConfig] = useState({ type: 'daily', start: '', end: '' });
+    // UI State
+    const [activeTool, setActiveTool] = useState(SHIFT_TEMPLATES[0]); // Default tool
+    const [customStatus, setCustomStatus] = useState({ label: 'Özel', color: '#ec4899' });
+    const [copiedGrid, setCopiedGrid] = useState(null);
+    const [hoveredCell, setHoveredCell] = useState(null); // { userId, index }
 
-    const shiftTemplates = [
-        { label: 'Sabah', start: '11:00', end: '20:00', color: '#6366f1' },
-        { label: 'Akşam', start: '13:00', end: '22:00', color: '#8b5cf6' }
-    ];
+    // User Detail View (Monthly/Weekly)
+    const [detailUser, setDetailUser] = useState(null);
 
     useEffect(() => { loadTeams(); }, []);
     useEffect(() => { if (selectedTeam) loadData(); }, [selectedTeam, selectedDate]);
 
-    // Timer for red line
-    useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-        return () => clearInterval(timer);
-    }, []);
-
+    // --- DATA LOADING ---
     const loadTeams = async () => {
         const res = await api.get('/teams');
         setTeams(res.data);
@@ -57,618 +66,313 @@ export default function AdminShifts() {
     };
 
     const loadData = async () => {
-        setLoading(true);
         try {
             const [usersRes, shiftsRes, breaksRes] = await Promise.all([
                 api.get(`/users/team/${selectedTeam}`),
                 api.get(`/shifts/team/${selectedTeam}`),
                 api.get(`/breaks/team/${selectedTeam}/date/${selectedDate}`)
             ]);
+
             setUsers(usersRes.data);
-            setAllShifts(shiftsRes.data);
-            // Filter shifts for the selected date
-            setShifts(shiftsRes.data.filter(s => s.shift_date === selectedDate));
             setBreaks(breaksRes.data.breaks);
+
+            // Initialize Grid State
+            const newGridState = {};
+            usersRes.data.forEach(u => {
+                newGridState[u.id] = Array(GRID_SIZE).fill(null);
+            });
+
+            // Populate Grid with Shifts
+            const daysShifts = shiftsRes.data.filter(s => s.shift_date === selectedDate);
+            daysShifts.forEach(s => {
+                const startIndex = timeToGridIndex(s.start_time);
+                const endIndex = timeToGridIndex(s.end_time);
+                const color = getShiftColor(s.special_status);
+
+                if (startIndex !== -1 && endIndex !== -1) {
+                    for (let i = startIndex; i < endIndex; i++) {
+                        if (i >= 0 && i < GRID_SIZE && newGridState[s.user_id]) {
+                            newGridState[s.user_id][i] = {
+                                status: s.special_status || 'Mesai',
+                                color: color,
+                                shiftId: s.id
+                            };
+                        }
+                    }
+                }
+            });
+
+            setGridState(newGridState);
         } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
+            console.error("Data load error:", err);
         }
     };
 
-    const handleDragStart = (template) => {
-        setDraggedTemplate(template);
+    const getShiftColor = (status) => {
+        if (!status || status === 'Mesai') return '#3b82f6';
+        if (status === 'İzin') return '#ef4444';
+        if (status === 'Raporlu') return '#f59e0b';
+        // Check custom tools logic or return default
+        return '#6366f1';
     };
 
-    const handleDrop = async (userId) => {
-        if (!draggedTemplate) return;
-        try {
-            const shiftData = {
-                user_id: userId,
-                shift_date: selectedDate,
-                start_time: draggedTemplate.start,
-                end_time: draggedTemplate.end,
-                special_status: draggedTemplate.label // Use label as status/title
-            };
-            await api.post('/shifts', shiftData);
-            loadData();
-        } catch (err) {
-            alert('Vardiya atanamadı');
-        } finally {
-            setDraggedTemplate(null);
+    // --- INTERACTION LOGIC ---
+
+    // Paint a single cell or range
+    const paintGrid = (userId, startIndex, endIndex = startIndex + 1) => {
+        setGridState(prev => {
+            const newRow = [...prev[userId]];
+
+            for (let i = startIndex; i < endIndex; i++) {
+                if (i >= GRID_SIZE) continue;
+
+                if (activeTool.type === 'eraser') {
+                    newRow[i] = null;
+                } else if (activeTool.type === 'template') {
+                    newRow[i] = {
+                        status: 'Mesai',
+                        color: activeTool.color
+                    };
+                } else if (activeTool.type === 'status') {
+                    newRow[i] = {
+                        status: activeTool.value,
+                        color: activeTool.color
+                    };
+                } else if (activeTool.type === 'custom') {
+                    newRow[i] = {
+                        status: customStatus.label,
+                        color: customStatus.color
+                    };
+                }
+            }
+
+            return { ...prev, [userId]: newRow };
+        });
+    };
+
+    const handleCellClick = (userId, index) => {
+        if (activeTool.type === 'template') {
+            const start = timeToGridIndex(activeTool.start);
+            const end = timeToGridIndex(activeTool.end);
+            paintGrid(userId, start, end);
+        } else {
+            paintGrid(userId, index);
         }
     };
 
-    const handleFlexibleCreate = async () => {
-        if (selectedAgents.length === 0) return alert('Lütfen en az bir agent seçin.');
-        if (!flexibleShift.start || !flexibleShift.end) return alert('Saat aralığı girin.');
-
-        const shiftsToCreate = selectedAgents.map(userId => ({
-            user_id: userId,
-            shift_date: selectedDate,
-            start_time: flexibleShift.start,
-            end_time: flexibleShift.end,
-            special_status: flexibleShift.label || 'Mesai' // Store label in special_status
-        }));
-
-        try {
-            await api.post('/shifts/bulk', { shifts: shiftsToCreate });
-            setShowFlexibleModal(false);
-            setSelectedAgents([]); // Clear selection
-            loadData();
-        } catch (err) {
-            alert('Atama başarısız oldu.');
-        }
+    const handleRowClick = (userId) => {
+        const user = users.find(u => u.id === userId);
+        setDetailUser(user);
     };
 
-    const toggleAgentSelection = (userId) => {
-        setSelectedAgents(prev =>
-            prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
-        );
-    };
+    // --- SAVING ---
+    const saveChanges = async () => {
+        // Convert grid back to shifts
+        const shiftsToSave = [];
 
-    const selectAll = () => {
-        if (selectedAgents.length === users.length) setSelectedAgents([]);
-        else setSelectedAgents(users.map(u => u.id));
-    };
+        Object.entries(gridState).forEach(([userId, grid]) => {
+            let currentBlock = null;
 
-    const handleGenerateReport = () => {
-        const doc = new jsPDF();
-        let title = 'Vardiya Raporu';
-        let filteredShifts = [...allShifts];
+            grid.forEach((cell, index) => {
+                const time = indexToTimeStr(index);
 
-        if (reportConfig.type === 'daily') {
-            title += ` - ${selectedDate}`;
-            filteredShifts = filteredShifts.filter(s => s.shift_date === selectedDate);
-        } else if (reportConfig.type === 'range') {
-            if (!reportConfig.start || !reportConfig.end) return alert('Tarih aralığı seçin');
-            title += ` (${reportConfig.start} - ${reportConfig.end})`;
-            filteredShifts = filteredShifts.filter(s => s.shift_date >= reportConfig.start && s.shift_date <= reportConfig.end);
-        }
+                if (cell) {
+                    if (!currentBlock) {
+                        // Start new block
+                        currentBlock = {
+                            user_id: parseInt(userId),
+                            start_index: index,
+                            start_time: time,
+                            status: cell.status,
+                            color: cell.color
+                        };
+                    } else if (cell.status !== currentBlock.status) {
+                        // End current, start new
+                        currentBlock.end_time = time;
+                        shiftsToSave.push(currentBlock);
 
-        doc.text(title, 14, 15);
+                        currentBlock = {
+                            user_id: parseInt(userId),
+                            start_index: index,
+                            start_time: time,
+                            status: cell.status,
+                            color: cell.color
+                        };
+                    }
+                } else {
+                    if (currentBlock) {
+                        // End block
+                        currentBlock.end_time = time;
+                        shiftsToSave.push(currentBlock);
+                        currentBlock = null;
+                    }
+                }
+            });
 
-        // Group by User then Date
-        const data = [];
-        // Sort by Date then User
-        filteredShifts.sort((a, b) => a.shift_date.localeCompare(b.shift_date) || a.user_id - b.user_id);
-
-        filteredShifts.forEach(s => {
-            const user = users.find(u => u.id === s.user_id);
-            if (user) {
-                data.push([
-                    s.shift_date,
-                    user.full_name,
-                    `NOT_IZM_${user.agent_number}`,
-                    `${s.start_time} - ${s.end_time}`,
-                    s.special_status || 'Mesai'
-                ]);
+            if (currentBlock) {
+                currentBlock.end_time = '24:00';
+                shiftsToSave.push(currentBlock);
             }
         });
 
-        if (data.length === 0) {
-            alert('Seçilen kriterlere uygun veri bulunamadı.');
-            return;
-        }
-
-        autoTable(doc, {
-            startY: 20,
-            head: [['Tarih', 'İsim', 'Sicil No', 'Saatler', 'Durum']],
-            body: data,
-        });
-
-        doc.save(`vardiya_raporu_${new Date().getTime()}.pdf`);
-        setShowReportModal(false);
-    };
-
-    const getTimelinePos = (timeStr) => {
-        if (!timeStr) return 0;
-        const [h, m] = timeStr.split(':').map(Number);
-        const totalMinutes = (h - 11) * 60 + m;
-        // Total range is 11:00 to 22:00 = 11 hours = 660 minutes.
-        return (totalMinutes / 660) * 100;
-    };
-
-    const getTimelineWidth = (duration) => {
-        return (duration / 660) * 100;
-    };
-
-    const handleAgentBulkAction = async () => {
-        if (!agentDateRange.start || !agentDateRange.end) return alert('Tarih aralığı seçin');
-
-        const start = new Date(agentDateRange.start);
-        const end = new Date(agentDateRange.end);
-        const shiftsToCreate = [];
-
-        // Loop through dates
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-            shiftsToCreate.push({
-                user_id: selectedAgent.id,
-                shift_date: d.toISOString().split('T')[0],
-                start_time: '00:00', // System handles this as special status if needed, or 00:00 for off
-                end_time: '00:00',
-                special_status: agentDateRange.status
-            });
-        }
-
         try {
-            await api.post('/shifts/bulk', { shifts: shiftsToCreate });
-            setSelectedAgent(null);
+            await api.delete(`/shifts/team/${selectedTeam}/date/${selectedDate}`);
+
+            const apiShifts = shiftsToSave.map(s => ({
+                user_id: s.user_id,
+                shift_date: selectedDate,
+                start_time: s.start_time,
+                end_time: s.end_time,
+                special_status: s.status
+            }));
+
+            if (apiShifts.length > 0) {
+                await api.post('/shifts/bulk', { shifts: apiShifts });
+            }
+            alert('Kaydedildi!');
             loadData();
         } catch (err) {
-            alert('İşlem başarısız');
+            console.error(err);
+            alert('Kaydetme hatası');
         }
+    };
+
+    const copyGrid = (userId) => {
+        setCopiedGrid([...gridState[userId]]);
+        alert('Kopyalandı!');
+    };
+
+    const pasteGrid = (userId) => {
+        if (!copiedGrid) return;
+        setGridState(prev => ({
+            ...prev,
+            [userId]: [...copiedGrid]
+        }));
     };
 
     return (
-        <div className="page admin-shifts">
-            <div className="page-header">
-                <div>
-                    <h1 className="page-title">📅 Vardiya Yönetimi</h1>
-                    <p className="page-subtitle">Timeline üzerinde esnek planlama</p>
+        <div className="page admin-shifts-reset">
+            <div className="reset-controls">
+                <div className="control-row">
+                    <h1 className="page-title">Vardiya Düzenleyici (Grid)</h1>
+                    <div className="actions">
+                        <button className="btn btn-primary" onClick={saveChanges}>💾 Kaydet</button>
+                    </div>
                 </div>
-                <div className="header-actions">
-                    <button className="btn btn-secondary" onClick={() => setShowReportModal(true)}>📄 PDF İndir</button>
-                    {selectedAgents.length > 0 && (
-                        <button className="btn btn-success" onClick={() => setShowFlexibleModal(true)}>
-                            ✨ Seçilenlere Ekle ({selectedAgents.length})
-                        </button>
-                    )}
-                </div>
-            </div>
 
-            <div className="shifts-controls card">
-                <div className="control-group">
-                    <label>Takım</label>
-                    <select className="form-select" value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)} disabled={user.role === 'TeamLead'}>
-                        <option value="">Takım Seçin...</option>
+                <div className="control-row secondary">
+                    <select className="form-select" value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)}>
+                        <option value="">Takım Seç...</option>
                         {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
-                </div>
-                <div className="control-group">
-                    <label>Tarih</label>
                     <input type="date" className="form-input" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
                 </div>
-                <div className="templates-pool">
-                    {shiftTemplates.map(template => (
-                        <div
-                            key={template.label}
-                            className="shift-template"
-                            draggable
-                            onDragStart={() => handleDragStart(template)}
-                            style={{ backgroundColor: template.color }}
+
+                <div className="toolbar">
+                    <span className="tool-label">Araçlar:</span>
+                    {SHIFT_TEMPLATES.map(t => (
+                        <button
+                            key={t.label}
+                            className={`tool-btn ${activeTool === t ? 'active' : ''}`}
+                            style={{ '--color': t.color }}
+                            onClick={() => setActiveTool(t)}
                         >
-                            {template.label} ({template.start}-{template.end})
-                        </div>
+                            {t.label}
+                        </button>
                     ))}
+                    <div className="divider"></div>
+                    {STATUS_TOOLS.map(t => (
+                        <button
+                            key={t.label}
+                            className={`tool-btn ${activeTool === t ? 'active' : ''}`}
+                            style={{ '--color': t.color }}
+                            onClick={() => setActiveTool(t)}
+                        >
+                            {t.label}
+                        </button>
+                    ))}
+                    <div className="divider"></div>
+                    <div className="custom-tool">
+                        <input type="text" value={customStatus.label} onChange={e => setCustomStatus({ ...customStatus, label: e.target.value })} className="mini-input" />
+                        <input type="color" value={customStatus.color} onChange={e => setCustomStatus({ ...customStatus, color: e.target.value })} className="mini-color" />
+                        <button
+                            className={`tool-btn ${activeTool.type === 'custom' ? 'active' : ''}`}
+                            style={{ '--color': customStatus.color }}
+                            onClick={() => setActiveTool({ type: 'custom', ...customStatus })}
+                        >
+                            Seç
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div className="shifts-grid card">
-                <div className="grid-header">
-                    <div className="agent-col" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <input
-                            type="checkbox"
-                            checked={users.length > 0 && selectedAgents.length === users.length}
-                            onChange={selectAll}
-                            style={{ width: 16, height: 16 }}
-                        />
-                        Agent
-                    </div>
-                    <div className="timeline-axis">
-                        {Array.from({ length: 12 }, (_, i) => 11 + i).map(h => (
-                            <div key={h} className="hour-mark">{h}:00</div>
+            <div className="grid-container">
+                {/* Header Row */}
+                <div className="grid-header-row">
+                    <div className="header-cell agent-name">Agent</div>
+                    <div className="header-cell timeline-wrapper">
+                        {Array.from({ length: 24 }).map((_, h) => (
+                            <div key={h} className="hour-marker" style={{ width: `${(1 / 24) * 100}%` }}>
+                                {h}
+                            </div>
                         ))}
                     </div>
+                    <div className="header-cell actions">İşlem</div>
                 </div>
 
-                <div className="grid-body">
-                    {/* Current Time Indicator logic moved inside render to be relative to timeline-cell if possible, 
-                        BUT since timeline is split per row, we need a global indicator OR indicators per row.
-                        Best approach: An absolute line over the whole grid body? No, body scroll.
-                        Better: Render it inside every timeline cell? Expensive but easy alignment.
-                        Best: Render it once in an absolute overlay over the grid body IF body was relative.
-                        Decision: Render inside every timeline cell for perfect sync with scroll.
-                    */}
-                    {users.map(u => {
-                        return (
-                            <div
-                                key={u.id}
-                                className="grid-row"
-                                onDragOver={(e) => e.preventDefault()}
-                                onDrop={() => handleDrop(u.id)}
-                            >
-                                <div className="agent-cell">
-                                    <div className="agent-mini-info" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedAgents.includes(u.id)}
-                                            onChange={() => toggleAgentSelection(u.id)}
-                                            style={{ width: 16, height: 16 }}
-                                        />
-                                        <div style={{ flex: 1, overflow: 'hidden' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div
-                                                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                                    onClick={() => {
-                                                        // New Advanced Modal Trigger
-                                                        setEditingUser(u);
-                                                        setAdvancedModalOpen(true);
-                                                    }}
-                                                >
-                                                    <div className="name" style={{ cursor: 'pointer', textDecoration: 'underline' }}>{u.full_name}</div>
-                                                    <div className="id">NOT_IZM_{u.agent_number}</div>
-                                                </div>
-                                                <button
-                                                    className="btn btn-sm btn-secondary"
-                                                    style={{ padding: '4px 8px', fontSize: '12px', marginLeft: 5 }}
-                                                    onClick={() => {
-                                                        const doc = new jsPDF();
-                                                        doc.text(`Vardiya Belgesi - ${u.full_name}`, 14, 15);
-
-                                                        const userShifts = shifts.filter(s => s.user_id === u.id);
-                                                        userShifts.sort((a, b) => a.shift_date.localeCompare(b.shift_date));
-
-                                                        const bodyData = userShifts.map(s => [
-                                                            s.shift_date,
-                                                            `${s.start_time} - ${s.end_time}`,
-                                                            s.special_status || 'Mesai'
-                                                        ]);
-
-                                                        if (bodyData.length === 0) {
-                                                            alert('Bu kullanıcıya ait vardiya bulunamadı.');
-                                                            return;
-                                                        }
-
-                                                        autoTable(doc, {
-                                                            startY: 20,
-                                                            head: [['Tarih', 'Saatler', 'Durum']],
-                                                            body: bodyData
-                                                        });
-                                                        doc.save(`vardiya_${u.full_name.replace(/\s+/g, '_')}_${selectedDate}.pdf`);
-                                                    }}
-                                                >📄</button>
-                                            </div>
-                                        </div>
-                                    </div>
+                {/* Users Rows */}
+                {users.map(user => (
+                    <div key={user.id} className="grid-row-wrapper">
+                        <ShiftGrid
+                            user={user}
+                            gridData={gridState[user.id]}
+                            breaks={breaks.filter(b => b.user_id === user.id)}
+                            onCellClick={handleCellClick}
+                            onCellHover={(uid, idx) => {
+                                if (uid && idx !== null) setHoveredCell({ userId: uid, index: idx });
+                                else setHoveredCell(null);
+                            }}
+                            onUserClick={handleRowClick}
+                            actions={
+                                <div style={{ display: 'flex', gap: '5px' }}>
+                                    <button className="btn-icon" onClick={(e) => { e.stopPropagation(); copyGrid(user.id); }} title="Kopyala">📋</button>
+                                    <button className="btn-icon" onClick={(e) => { e.stopPropagation(); pasteGrid(user.id); }} title="Yapıştır">📝</button>
                                 </div>
-                                <div className="timeline-cell" onClick={() => {
-                                    setEditingUser(u);
-                                    setAdvancedModalOpen(true);
-                                }}>
-                                    {/* Current Time Line */}
-                                    {currentTime.getHours() >= 11 && currentTime.getHours() < 22 && (
-                                        <div style={{
-                                            position: 'absolute',
-                                            top: 0, bottom: 0, width: 2, background: 'red', zIndex: 15, pointerEvents: 'none',
-                                            left: `${((currentTime.getHours() - 11) * 60 + currentTime.getMinutes()) / 660 * 100}%`
-                                        }}>
-                                            <div style={{
-                                                position: 'absolute', top: -15, left: -15, background: 'red', color: 'white',
-                                                fontSize: '10px', padding: '2px 4px', borderRadius: '4px', whiteSpace: 'nowrap'
-                                            }}>
-                                                {currentTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {shifts.filter(s => s.user_id === u.id).map(shift => (
-                                        <div
-                                            key={shift.id}
-                                            className="shift-bar"
-                                            style={{
-                                                left: `${getTimelinePos(shift.start_time)}%`,
-                                                width: `${getTimelinePos(shift.end_time) - getTimelinePos(shift.start_time)}%`,
-                                                backgroundColor: shift.special_status === 'İzin' ? '#ef4444' : shift.special_status === 'Raporlu' ? '#ef4444' : '#6366f1' // Default blue
-                                            }}
-                                            onClick={(e) => { e.stopPropagation(); setEditingShift(shift); }}
-                                            title={`${shift.start_time} - ${shift.end_time} (${shift.special_status || 'Mesai'})`}
-                                        >
-                                            <span className="time-text">{shift.special_status || `${shift.start_time} - ${shift.end_time}`}</span>
-                                        </div>
-                                    ))}
-
-                                    {/* Breaks Overlay */}
-                                    {breaks.filter(b => b.user_id === u.id).map(brk => (
-                                        <div
-                                            key={brk.id}
-                                            className="break-overlay"
-                                            style={{
-                                                left: `${getTimelinePos(brk.start_time)}%`,
-                                                width: `${getTimelineWidth(brk.duration_minutes)}%`,
-                                                position: 'absolute',
-                                                top: '10%', height: '80%',
-                                                background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.2), rgba(255,255,255,0.2) 5px, rgba(255,255,255,0.4) 5px, rgba(255,255,255,0.4) 10px)',
-                                                zIndex: 12,
-                                                borderRadius: 4,
-                                                pointerEvents: 'none',
-                                                border: '1px solid rgba(255,255,255,0.3)',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center',
-                                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                                            }}
-                                            title={`Mola: ${brk.start_time} (${brk.duration_minutes}dk)`}
-                                        >
-                                            {brk.duration_minutes >= 20 && <span style={{ fontSize: 12, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.8))' }}>☕</span>}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
+                            }
+                        />
+                    </div>
+                ))}
             </div>
 
-            {editingShift && (
-                <div className="modal-overlay" onClick={() => setEditingShift(null)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
+            {/* User Detail Modal */}
+            {detailUser && (
+                <div className="modal-overlay" onClick={() => setDetailUser(null)}>
+                    <div className="modal" style={{ maxWidth: '95vw', width: '1200px', height: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3 className="modal-title">Vardiyayı Düzenle</h3>
+                            <h3 className="modal-title">{detailUser.full_name} - Aylık Program</h3>
+                            <button className="btn-icon" onClick={() => setDetailUser(null)}>❌</button>
                         </div>
-                        <div className="modal-body">
-                            <div className="form-group">
-                                <label className="form-label">Başlangıç</label>
-                                <input type="time" className="form-input" value={editingShift.start_time} onChange={(e) => setEditingShift({ ...editingShift, start_time: e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Bitiş</label>
-                                <input type="time" className="form-input" value={editingShift.end_time} onChange={(e) => setEditingShift({ ...editingShift, end_time: e.target.value })} />
-                            </div>
-                        </div>
-                        <div className="modal-footer">
-                            <button className="btn btn-danger" onClick={async () => {
-                                await api.delete(`/shifts/${editingShift.id}`);
-                                setEditingShift(null);
-                                loadData();
-                            }}>Sil</button>
-                            <button className="btn btn-primary" onClick={async () => {
-                                await api.put(`/shifts/${editingShift.id}`, editingShift);
-                                setEditingShift(null);
-                                loadData();
-                            }}>Kaydet</button>
+                        <div className="modal-body" style={{ flex: 1, overflow: 'auto', background: '#0f172a' }}>
+                            <UserMonthlyGrid userId={detailUser.id} />
                         </div>
                     </div>
                 </div>
             )}
 
-            {showFlexibleModal && (
-                <div className="modal-overlay" onClick={() => setShowFlexibleModal(false)}>
-                    {/* ... Existing Bulk Modal ... */}
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3 className="modal-title">Toplu Vardiya Ekle</h3>
-                            <div className="text-muted small">{selectedAgents.length} kişi seçili</div>
-                            <button className="modal-close" onClick={() => setShowFlexibleModal(false)}>×</button>
-                        </div>
-                        <div className="modal-body">
-                            {/* Reusing existing logic for bulk */}
-                            <div className="form-group">
-                                <label className="form-label">Başlangıç</label>
-                                <input type="time" className="form-input" value={flexibleShift.start} onChange={e => setFlexibleShift({ ...flexibleShift, start: e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Bitiş</label>
-                                <input type="time" className="form-input" value={flexibleShift.end} onChange={e => setFlexibleShift({ ...flexibleShift, end: e.target.value })} />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Etiket / Durum</label>
-                                <input type="text" className="form-input" value={flexibleShift.label} onChange={e => setFlexibleShift({ ...flexibleShift, label: e.target.value })} placeholder="Örn: Eğitim" />
-                            </div>
-                        </div>
-                        <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setShowFlexibleModal(false)}>İptal</button>
-                            <button className="btn btn-success" onClick={handleFlexibleCreate}>Ekle</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {advancedModalOpen && editingUser && (
-                <div className="modal-overlay" onClick={() => setAdvancedModalOpen(false)}>
-                    <div className="modal" style={{ maxWidth: 500 }} onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3 className="modal-title">{editingUser.full_name} - Vardiya Yönetimi</h3>
-                            <div className="text-muted small">{new Date(selectedDate).toLocaleDateString('tr-TR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
-                            <button className="modal-close" onClick={() => setAdvancedModalOpen(false)}>×</button>
-                        </div>
-                        <div className="modal-body">
-                            <div className="tabs" style={{ display: 'flex', gap: 10, borderBottom: '1px solid var(--border)', marginBottom: 15 }}>
-                                <button className="tab-btn active" style={{ padding: '8px 16px', borderBottom: '2px solid var(--primary)', fontWeight: 600 }}>Günlük</button>
-                                <button className="tab-btn" style={{ padding: '8px 16px', color: 'var(--text-muted)' }} disabled>Haftalık (Yakında)</button>
-                            </div>
-
-                            <div className="daily-view">
-                                <h4 style={{ fontSize: 14, marginBottom: 10, color: 'var(--text-muted)' }}>Hızlı Stok Atama</h4>
-                                <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-                                    {[
-                                        { label: '11:00 - 20:00 (Sabah)', start: '11:00', end: '20:00', color: '#6366f1' },
-                                        { label: '13:00 - 22:00 (Akşam)', start: '13:00', end: '22:00', color: '#8b5cf6' }
-                                    ].map(stock => (
-                                        <button
-                                            key={stock.label}
-                                            className="btn"
-                                            style={{ flex: 1, backgroundColor: stock.color, color: 'white', border: 'none' }}
-                                            onClick={async () => {
-                                                try {
-                                                    await api.post('/shifts', {
-                                                        user_id: editingUser.id,
-                                                        shift_date: selectedDate,
-                                                        start_time: stock.start,
-                                                        end_time: stock.end,
-                                                        special_status: 'Mesai'
-                                                    });
-                                                    loadData();
-                                                    setAdvancedModalOpen(false);
-                                                } catch (err) { alert('Hata: ' + err.message); }
-                                            }}
-                                        >
-                                            {stock.label}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <h4 style={{ fontSize: 14, marginBottom: 10, color: 'var(--text-muted)' }}>Özel Saat Gir</h4>
-                                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                                    <div style={{ flex: 1, minWidth: 100 }}>
-                                        <label className="form-label" style={{ fontSize: 12 }}>Başlangıç</label>
-                                        <input type="time" className="form-input" id="custom-start" defaultValue="09:00" />
-                                    </div>
-                                    <div style={{ flex: 1, minWidth: 100 }}>
-                                        <label className="form-label" style={{ fontSize: 12 }}>Bitiş</label>
-                                        <input type="time" className="form-input" id="custom-end" defaultValue="18:00" />
-                                    </div>
-                                    <div style={{ flex: 1, minWidth: 120 }}>
-                                        <label className="form-label" style={{ fontSize: 12 }}>Durum & Renk</label>
-                                        <div style={{ display: 'flex', gap: 5 }}>
-                                            <input type="text" className="form-input" id="custom-status" placeholder="Mesai, İzin..." defaultValue="Mesai" />
-                                            <input type="color" className="form-input" id="custom-color" defaultValue="#6366f1" style={{ width: 40, padding: 2 }} />
-                                        </div>
-                                    </div>
-                                    <button className="btn btn-primary" onClick={async () => {
-                                        const s = document.getElementById('custom-start').value;
-                                        const e = document.getElementById('custom-end').value;
-                                        const status = document.getElementById('custom-status').value;
-                                        const color = document.getElementById('custom-color').value;
-
-                                        if (!s || !e) return alert('Saat giriniz');
-                                        try {
-                                            await api.post('/shifts', {
-                                                user_id: editingUser.id,
-                                                shift_date: selectedDate,
-                                                start_time: s,
-                                                end_time: e,
-                                                special_status: status // Use status field
-                                                // Note: Color storage requires backend support or logic in getShiftColor. 
-                                                // For now we trust the status name will map to color or we need to update backend to store color.
-                                                // As per user request "X Durumuna istediği rengi verebilir", implies we should store it.
-                                                // Assuming backend schema has 'color' or we can add it? 
-                                                // Looking at previous `handleDrop`, we only sent `special_status`.
-                                                // I will assume for now we use special_status. 
-                                                // If specific custom color per shift is needed, we might need a migration or mapping.
-                                                // For this iteration, I'll send it if API supports it, or ignored.
-                                            });
-                                            // Ideally we save the color preference in a separate map or the shift table has a color column.
-                                            loadData();
-                                            setAdvancedModalOpen(false);
-                                        } catch (err) { alert('Hata'); }
-                                    }}>Ekle</button>
-                                </div>
-
-                                <h4 style={{ fontSize: 14, marginTop: 20, marginBottom: 10, color: 'var(--text-muted)' }}>Mevcut Vardiyalar & Bölme</h4>
-                                <div className="current-shifts-list">
-                                    {shifts.filter(s => s.user_id === editingUser.id).map(shift => (
-                                        <div key={shift.id} style={{ background: 'rgba(255,255,255,0.05)', padding: 10, borderRadius: 4, marginBottom: 10 }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                                                <span style={{ fontWeight: 600 }}>{shift.start_time} - {shift.end_time} ({shift.special_status || 'Mesai'})</span>
-                                                <button className="btn btn-danger btn-sm" onClick={async () => {
-                                                    await api.delete(`/shifts/${shift.id}`);
-                                                    loadData();
-                                                }}>Sil</button>
-                                            </div>
-
-                                            {/* Split Logic Interface */}
-                                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: 5, borderRadius: 4 }}>
-                                                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Vardiyayı Böl:</span>
-                                                <input type="time" className="form-input" style={{ width: 80, height: 28, fontSize: 12 }} id={`split-time-${shift.id}`} />
-                                                <input type="text" className="form-input" placeholder="Sonrası Durum" style={{ width: 100, height: 28, fontSize: 12 }} id={`split-status-${shift.id}`} />
-                                                <button className="btn btn-xs btn-secondary" style={{ fontSize: 11 }} onClick={async () => {
-                                                    const splitTime = document.getElementById(`split-time-${shift.id}`).value;
-                                                    const splitStatus = document.getElementById(`split-status-${shift.id}`).value;
-                                                    if (!splitTime || !splitStatus) return alert('Bölme saati ve durumu girin.');
-
-                                                    // Basic validation: splitTime must be between start and end
-                                                    if (splitTime <= shift.start_time || splitTime >= shift.end_time) return alert('Bölme saati vardiya aralığında olmalı.');
-
-                                                    try {
-                                                        // 1. Delete original
-                                                        await api.delete(`/shifts/${shift.id}`);
-
-                                                        // 2. Create Part 1 (Start -> Split)
-                                                        await api.post('/shifts', {
-                                                            user_id: editingUser.id,
-                                                            shift_date: selectedDate,
-                                                            start_time: shift.start_time,
-                                                            end_time: splitTime,
-                                                            special_status: shift.special_status // Keep original status
-                                                        });
-
-                                                        // 3. Create Part 2 (Split -> End)
-                                                        await api.post('/shifts', {
-                                                            user_id: editingUser.id,
-                                                            shift_date: selectedDate,
-                                                            start_time: splitTime,
-                                                            end_time: shift.end_time,
-                                                            special_status: splitStatus // New Status
-                                                        });
-
-                                                        loadData();
-                                                    } catch (err) { alert('Hata: ' + err.message); }
-                                                }}>Böl & Uygula</button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {shifts.filter(s => s.user_id === editingUser.id).length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Vardiya yok.</span>}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {showReportModal && (
-                <div className="modal-overlay" onClick={() => setShowReportModal(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3 className="modal-title">Rapor Oluştur</h3>
-                            <button className="modal-close" onClick={() => setShowReportModal(false)}>×</button>
-                        </div>
-                        <div className="modal-body">
-                            <div className="form-group">
-                                <label className="form-label">Rapor Tipi</label>
-                                <select className="form-select" value={reportConfig.type} onChange={e => setReportConfig({ ...reportConfig, type: e.target.value })}>
-                                    <option value="daily">Seçili Gün ({selectedDate})</option>
-                                    <option value="range">Tarih Aralığı</option>
-                                </select>
-                            </div>
-                            {reportConfig.type === 'range' && (
-                                <>
-                                    <div className="form-group">
-                                        <label className="form-label">Başlangıç</label>
-                                        <input type="date" className="form-input" value={reportConfig.start} onChange={e => setReportConfig({ ...reportConfig, start: e.target.value })} />
-                                    </div>
-                                    <div className="form-group">
-                                        <label className="form-label">Bitiş</label>
-                                        <input type="date" className="form-input" value={reportConfig.end} onChange={e => setReportConfig({ ...reportConfig, end: e.target.value })} />
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                        <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setShowReportModal(false)}>İptal</button>
-                            <button className="btn btn-primary" onClick={handleGenerateReport}>İndir</button>
-                        </div>
-                    </div>
+            {/* Hover Tooltip Overlay */}
+            {hoveredCell && (
+                <div className="floating-tooltip" style={{
+                    position: 'fixed',
+                    bottom: 20,
+                    right: 20,
+                    background: 'rgba(0,0,0,0.8)',
+                    color: 'white',
+                    padding: '8px 12px',
+                    borderRadius: 4,
+                    zIndex: 200, // Higher than modal
+                    pointerEvents: 'none'
+                }}>
+                    {indexToTimeStr(hoveredCell.index)} - {indexToTimeStr(hoveredCell.index + 1)}
                 </div>
             )}
         </div>
