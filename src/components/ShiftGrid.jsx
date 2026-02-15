@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import './Shifts.css?v=2'; // Ensure new CSS is loaded
+import '../pages/admin/Shifts.v3.css'; // Ensure new CSS is loaded
 
 export default function ShiftGrid({ user, gridData, breaks = [], onCellClick, onCellHover, actions, onUserClick, onRangeSelect }) {
     const [dragStart, setDragStart] = useState(null);
