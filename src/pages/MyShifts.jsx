@@ -38,9 +38,10 @@ export default function MyShifts() {
         try {
             const today = new Date();
             const start = new Date(today);
+            // Show range: Yesterday to +5 days
             start.setDate(today.getDate() - 1);
             const end = new Date(today);
-            end.setDate(today.getDate() + 6);
+            end.setDate(today.getDate() + 5);
 
             const sStr = start.toISOString().split('T')[0];
             const eStr = end.toISOString().split('T')[0];
@@ -126,7 +127,8 @@ export default function MyShifts() {
                         <div key={day.date} className="grid-row-wrapper">
                             <ShiftGrid
                                 user={{
-                                    full_name: day.rawDate.toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' }),
+                                    // Pass shift_date allows ShiftGrid to format it nicely
+                                    // We don't utilize full_name here because ShiftGrid will ignore it if shift_date is present
                                     shift_date: day.date,
                                     id: user.id
                                 }}

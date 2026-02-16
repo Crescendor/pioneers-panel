@@ -85,8 +85,11 @@
     display: grid;
     grid-template-columns: var(--col-user) var(--col-time) var(--col-act);
     height: 50px;
+    /* Explicit height */
     border-bottom: 1px solid rgba(255, 255, 255, 0.03);
     transition: background 0.2s;
+    align-items: center;
+    /* Center items vertically */
 }
 
 .grid-user-row:hover {
@@ -102,19 +105,23 @@
     border-left: 1px solid rgba(255, 255, 255, 0.05);
     border-right: 1px solid rgba(255, 255, 255, 0.05);
     position: relative;
+    /* Ensure content inside doesn't overflow weirdly */
+    overflow: visible;
 }
 
 .grid-cell {
-    border-right: 1px solid rgba(255, 255, 255, 0.03);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
     height: 100%;
     cursor: crosshair;
     transition: background 0.1s;
     position: relative;
     user-select: none;
+    min-height: 50px;
+    /* Force height */
 }
 
 .grid-cell:nth-child(2n) {
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Hour Markers */
@@ -131,8 +138,6 @@
 
 /* 
    RED LINE IMPLEMENTATION 
-   Positioned absolute relative to .grid-scroll-content.
-   Left = UserColWidth + ( (TotalWidth - FixedCols) * Percent / 100 )
 */
 .current-time-line {
     position: absolute;
@@ -144,8 +149,6 @@
     z-index: 40;
     pointer-events: none;
     transition: left 60s linear;
-
-    /* The Magic Calculation */
     left: calc(var(--col-user) + ((100% - var(--total-fixed)) * var(--time-percent) / 100));
 }
 
@@ -174,6 +177,8 @@
     left: 0;
     background: #0f172a;
     z-index: 30;
+    height: 50px;
+    /* Match row height */
 }
 
 .user-info .name {
@@ -192,17 +197,20 @@
 /* Break Overlay */
 .break-overlay {
     position: absolute;
-    height: 60%;
-    top: 20%;
-    background: repeating-linear-gradient(45deg,
-            rgba(0, 0, 0, 0.5),
-            rgba(0, 0, 0, 0.5) 5px,
-            rgba(255, 255, 255, 0.1) 5px,
-            rgba(255, 255, 255, 0.1) 10px);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    height: 50%;
+    /* Smaller height */
+    top: 25%;
+    /* Centered vertically */
+    /* Use a simple translucent branding */
+    background: rgba(16, 185, 129, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.5);
     border-radius: 4px;
     pointer-events: none;
     z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
 }
 
 /* Smart Label */
@@ -218,7 +226,7 @@
     pointer-events: none;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
     z-index: 10;
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.4);
     padding: 2px 6px;
     border-radius: 4px;
 }

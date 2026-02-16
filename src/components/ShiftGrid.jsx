@@ -12,22 +12,18 @@ export default function ShiftGrid({ user, gridData, breaks = [], onCellClick, on
     };
 
     const handleMouseEnter = (index) => {
-        // Optional: We could emit hover events here for drag preview
         if (onCellHover) onCellHover(user.id, index);
     };
 
     const handleMouseUp = (index) => {
         if (dragStart !== null) {
-            // Determine range (min to max) to allow backward drag
             const start = Math.min(dragStart, index);
             const end = Math.max(dragStart, index);
 
-            // If it's a single click (start === end), fallback to onCellClick
-            // If it's a drag (start !== end), use onRangeSelect
             if (start === end && onCellClick) {
                 onCellClick(user.id, start);
             } else if (onRangeSelect) {
-                onRangeSelect(user.id, start, end + 1); // +1 because logic usually expects exclusive end
+                onRangeSelect(user.id, start, end + 1);
             }
             setDragStart(null);
         }
@@ -40,13 +36,10 @@ export default function ShiftGrid({ user, gridData, breaks = [], onCellClick, on
     gridData.forEach((cell, index) => {
         if (cell) {
             if (!currentBlock) {
-                // Start new block
                 currentBlock = { status: cell.status, color: cell.color, start: index, end: index };
             } else if (cell.status === currentBlock.status && cell.color === currentBlock.color) {
-                // Continue block
                 currentBlock.end = index;
             } else {
-                // End previous, start new
                 blocks.push(currentBlock);
                 currentBlock = { status: cell.status, color: cell.color, start: index, end: index };
             }
@@ -59,11 +52,20 @@ export default function ShiftGrid({ user, gridData, breaks = [], onCellClick, on
     });
     if (currentBlock) blocks.push(currentBlock);
 
+    // Determine displayName and subText
+    // If shift_date exists, we are in MyShifts view -> show formatted date as title, hide subtext
+    // If shift_date is missing, we are in Admin view -> show name + code
+    const isAgentView = !!user.shift_date;
+    const displayName = isAgentView
+        ? new Date(user.shift_date).toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' })
+        : user.full_name;
+    const subText = isAgentView ? null : user.agent_number;
+
     return (
         <div className="grid-user-row">
             <div className="user-info" onClick={() => onUserClick && onUserClick(user.id)} style={{ cursor: onUserClick ? 'pointer' : 'default' }}>
-                <div className="name" title={user.full_name}>{user.shift_date ? new Date(user.shift_date).toLocaleDateString('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' }) : user.full_name}</div>
-                <div className="code">{user.shift_date ? 'Günlük Görünüm' : user.agent_number}</div>
+                <div className="name" title={user.full_name}>{displayName}</div>
+                {subText && <div className="code">{subText}</div>}
             </div>
 
             <div className="grid-cells-container" onMouseLeave={() => setDragStart(null)}>
@@ -102,14 +104,11 @@ export default function ShiftGrid({ user, gridData, breaks = [], onCellClick, on
 
                 {/* Render Break Overlays */}
                 {breaks && breaks.map((b, i) => {
-                    // Convert break start time (HH:MM) to percentage
                     if (!b.start_time) return null;
                     const [h, m] = b.start_time.split(':').map(Number);
                     const totalMins = h * 60 + m;
                     const gridPos = totalMins / 30;
                     const left = (gridPos / 48) * 100;
-
-                    // Duration is usually 30 min (1 slot) or 15
                     let width = (1 / 48) * 100;
                     if (b.duration) {
                         width = (b.duration / (24 * 60)) * 100;
